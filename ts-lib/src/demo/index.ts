@@ -1,7 +1,7 @@
-import Seated from '../lib';
+import Seated from '../v0';
 import './index.css';
 
-var seated;
+var seated: Seated;
 
 let fab = document.createElement('div');
 
@@ -21,19 +21,8 @@ fab.addEventListener('click', (click) => {
 	console.log(click);
 	seated.createSeat({
 		radius: 5,
-		fill: 'red',
-		id: 'B-14',
-		onClick: (data) => {
-			console.log(data);
-		},
-		onMouseOver: (data) => {
-			console.log(data);
-			container.style.cursor = 'pointer';
-		},
-		onMouseOut: (data) => {
-			console.log(data);
-			container.style.cursor = 'default';
-		},
+		color: 'red',
+		data: { row: 'B', number: 14 },
 	});
 });
 document.body.appendChild(fab);
@@ -55,7 +44,7 @@ fab2.addEventListener('click', (click) => {
 	console.log(click);
 	let data = seated.export();
 	console.log(data);
-	localStorage.setItem('data', data);
+	localStorage.setItem('data', JSON.stringify(data));
 });
 document.body.appendChild(fab2);
 
@@ -73,7 +62,7 @@ fab3.style.display = 'grid';
 fab3.style.placeContent = 'center';
 fab3.style.cursor = 'pointer';
 fab3.addEventListener('click', (click) => {
-	seated = new Seated(container, true);
+	seated.import();
 });
 document.body.appendChild(fab3);
 
@@ -90,10 +79,27 @@ fab4.innerHTML = 'load';
 fab4.style.display = 'grid';
 fab4.style.placeContent = 'center';
 fab4.style.cursor = 'pointer';
-fab4.addEventListener('click', (click) => {
-	seated = new Seated(container, true, localStorage.getItem('data')!);
+fab4.addEventListener('click', () => {
+	seated.import(JSON.parse(localStorage.getItem('data') || ''));
 });
 document.body.appendChild(fab4);
+let fab5 = document.createElement('div');
+fab5.style.backgroundColor = 'cyan';
+fab5.style.position = 'fixed';
+fab5.style.bottom = '300px';
+fab5.style.left = '75px';
+fab5.style.width = '100px';
+fab5.style.height = '100px';
+fab5.style.borderRadius = '50%';
+fab5.style.zIndex = '5';
+fab5.innerHTML = 'Toggle Edit';
+fab5.style.display = 'grid';
+fab5.style.placeContent = 'center';
+fab5.style.cursor = 'pointer';
+fab5.addEventListener('click', () => {
+	seated.setEditionMode(!seated.editMode);
+});
+document.body.appendChild(fab5);
 
 let container = document.createElement('div');
 container.id = 'container';
@@ -101,28 +107,17 @@ container.style.height = '100%';
 
 document.body.appendChild(container);
 
-if (!seated) {
-	seated = new Seated(container, true);
-}
+seated = new Seated(container, true);
 seated?.createSeat({
 	x: 512,
 	y: 512,
 	radius: 5,
-	fill: 'red',
-	id: 'B-14',
-	onClick: (data) => {
-		console.log(data);
-	},
-	onMouseOver: (data) => {
-		console.log(data);
-		container.style.cursor = 'pointer';
-	},
-	onMouseOut: (data) => {
-		console.log(data);
-		container.style.cursor = 'default';
-	},
+	color: 'red',
+	data: { row: 'B', number: 14 },
 });
 
-var save = () => {};
-
-export default save;
+seated.seatEventObservable$.subscribe({
+	next: (event) => {
+		console.log(event);
+	},
+});

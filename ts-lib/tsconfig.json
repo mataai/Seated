@@ -4,12 +4,11 @@
 		"module": "esnext",
 		"target": "es5",
 		"strict": true,
-		"allowJs": true,
 		"sourceMap": true,
 		"declaration": true,
 		"emitDeclarationOnly": true,
-		"lib": ["es2018", "dom"],
+		"lib": ["es2022", "dom"],
 		"moduleResolution": "node"
 	},
-	"include": ["src/lib"]
+	"include": ["src/v0"]
 }

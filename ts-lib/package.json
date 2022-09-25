@@ -5,9 +5,9 @@
   "main": "build/index.js",
   "types": "build/types/index.d.ts",
   "scripts": {
-    "start": "webpack serve --config webpack.config.demo.js",
+    "start": "webpack serve --config webpack.config.js",
     "build": "webpack && tsc",
-    "build:demo": "webpack --config webpack.config.demo.js",
+    "build:demo": "webpack --config webpack.config.js",
     "prepare": "npm run build",
     "trypublish": "npm publish || true"
   },
@@ -19,6 +19,7 @@
     "@babel/polyfill": "^7.12.1",
     "@babel/preset-env": "^7.18.10",
     "@types/jest": "^28.1.6",
+    "@types/uuid": "^8.3.4",
     "@typescript-eslint/eslint-plugin": "^4.32.0",
     "@typescript-eslint/parser": "^4.33.0",
     "babel-eslint": "^10.1.0",
@@ -39,6 +40,8 @@
     "webpack-dev-server": "4.9.3"
   },
   "dependencies": {
-    "konva": "^8.3.10"
+    "konva": "^8.3.10",
+    "rxjs": "^7.5.6",
+    "uuid": "^9.0.0"
   }
 }
