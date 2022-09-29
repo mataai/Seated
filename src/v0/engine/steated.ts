@@ -1,7 +1,8 @@
 import Konva from 'konva';
 import { Observable, Subject } from 'rxjs';
-import { v4 as uuidv4 } from 'uuid';
-import { KonvaOutput, Seat, SeatConfig, SeatedSaveData, SeatedSeatSaveData, SeatEvent } from '../models';
+import { NIL, v4 as uuidv4 } from 'uuid';
+import { KonvaOutput, Seat, SeatConfig, SeatedConst, SeatedSaveData, SeatedSeatSaveData, SeatEvent } from '../models';
+import { Vector2d } from '../models/konva.models';
 
 export class Seated {
 	private _stage: Konva.Stage;
@@ -9,6 +10,7 @@ export class Seated {
 	private _seats: Seat[] = [];
 
 	private _importedData?: SeatedSaveData;
+
 
 	public get editMode() {
 		return this._editionMode;
@@ -32,6 +34,7 @@ export class Seated {
 		window.addEventListener('resize', () => {
 			this._scaleChange();
 		});
+		this._initiateClipCheck();
 	}
 
 	public setEditionMode(editionMode: boolean): void {
@@ -149,5 +152,45 @@ export class Seated {
 		this._stage.width(sceneWidth * scale);
 		this._stage.height(sceneHeight * scale);
 		this._stage.scale({ x: scale, y: scale });
+	}
+
+
+	// last position of selected seat
+	private _lastPosition:Vector2d | null = null;
+
+	private _initiateClipCheck():void{
+		this.seatEventObservable$.subscribe(selectedSeat => {
+			if(selectedSeat.type === "dragmove"){
+				for(let element of this._seats){
+					const isClippingX = Math.abs(selectedSeat.data.shape.x() - element.shape.x()) <  SeatedConst.SEAT_CLIP_RADIUS;
+					const isClippingY = Math.abs(selectedSeat.data.shape.y() - element.shape.y()) <  SeatedConst.SEAT_CLIP_RADIUS;
+
+					// finding magnitude(distance) between two points
+					const vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots : Vector2d = {x: element.shape.x() - selectedSeat.data.shape.x(),y: element.shape.y() - selectedSeat.data.shape.y()};
+					const magnitude = Math.sqrt(Math.pow(vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots.x,2) + Math.pow(vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots.y,2));
+
+
+					// Idiot proof checkup to prevent people from stacking seats
+					if(this._lastPosition != null && magnitude <= element.shape.width()){
+						selectedSeat.data.shape.setPosition(this._lastPosition);
+						break;
+					}
+
+					// Clips dragged seat on the x axis
+					if(isClippingX && !isClippingY){
+						selectedSeat.data.shape.setPosition({x:element.shape.x(), y:selectedSeat.data.shape.y()})
+						break;
+					}
+					// Clips dragged seat on the y axis
+					if(isClippingY && !isClippingX){
+						selectedSeat.data.shape.setPosition({x:selectedSeat.data.shape.x(), y:element.shape.y()})
+						break;
+					}
+
+					//registers last position of the selected seat for the idiot proof function
+					this._lastPosition = selectedSeat.data.shape.getPosition();
+				}
+			}
+		})
 	}
 }
