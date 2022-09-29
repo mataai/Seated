@@ -90,25 +90,24 @@ export class Seated {
 				this._container.getBoundingClientRect().height,
 				this._container,
 			);
-			return;
-		}
+		} else {
+			this._importedData = data;
 
-		this._importedData = data;
-
-		this._createStage(data.dimentions.width, data.dimentions.height, this._container);
-		this._seatLayer.clear();
-		data.seats.forEach((x) => {
-			this.createSeat({
-				x: x.shape.x,
-				y: x.shape.y,
-				radius: x.shape.radius,
-				color: x.shape.fill,
-				id: x.internalId,
-				data: x.data,
+			this._createStage(data.dimentions.width, data.dimentions.height, this._container);
+			this._seatLayer.clear();
+			data.seats.forEach((x) => {
+				this.createSeat({
+					x: x.shape.x,
+					y: x.shape.y,
+					radius: x.shape.radius,
+					color: x.shape.fill,
+					id: x.internalId,
+					data: x.data,
+				});
+				return x;
 			});
-			return x;
-		});
-		this._scaleChange();
+			this._scaleChange();
+		}
 	}
 
 	public export(): SeatedSaveData {
