@@ -166,8 +166,8 @@ export class Seated {
 					const isClippingY = Math.abs(selectedSeat.data.shape.y() - element.shape.y()) <  SeatedConst.SEAT_CLIP_RADIUS;
 
 					// finding magnitude(distance) between two points
-					const vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingidiots : Vector2d = {x: element.shape.x() - selectedSeat.data.shape.x(),y: element.shape.y() - selectedSeat.data.shape.y()};
-					const magnitude = Math.sqrt(Math.pow(vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingidiots.x,2) + Math.pow(vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingidiots.y,2));
+					const vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots : Vector2d = {x: element.shape.x() - selectedSeat.data.shape.x(),y: element.shape.y() - selectedSeat.data.shape.y()};
+					const magnitude = Math.sqrt(Math.pow(vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots.x,2) + Math.pow(vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots.y,2));
 
 
 					// Idiot proof checkup to prevent people from stacking seats
