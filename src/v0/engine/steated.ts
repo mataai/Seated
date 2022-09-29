@@ -27,6 +27,7 @@ export class Seated {
 		});
 		this._seatLayer = new Konva.Layer({ name: 'seatLayer', draggable: false });
 		this._stage.add(this._seatLayer);
+		this._stage.container().style.backgroundColor = '#333333'; // Change background color
 		this._seatLayer.draw();
 		window.addEventListener('resize', () => {
 			this._scaleChange();
