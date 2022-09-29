@@ -1,10 +1,10 @@
-import Seated from '../v0';
+import Seated from '../src';
 import './index.css';
 
 var seated: Seated;
 
+// NEW SEAT
 let fab = document.createElement('div');
-
 fab.style.backgroundColor = 'cyan';
 fab.style.position = 'fixed';
 fab.style.bottom = '50px';
@@ -27,6 +27,8 @@ fab.addEventListener('click', (click) => {
 });
 document.body.appendChild(fab);
 
+
+// SAVE
 let fab2 = document.createElement('div');
 fab2.style.backgroundColor = 'cyan';
 fab2.style.position = 'fixed';
@@ -48,6 +50,8 @@ fab2.addEventListener('click', (click) => {
 });
 document.body.appendChild(fab2);
 
+
+// CREATE NEW
 let fab3 = document.createElement('div');
 fab3.style.backgroundColor = 'cyan';
 fab3.style.position = 'fixed';
@@ -66,6 +70,7 @@ fab3.addEventListener('click', (click) => {
 });
 document.body.appendChild(fab3);
 
+// LOAD
 let fab4 = document.createElement('div');
 fab4.style.backgroundColor = 'cyan';
 fab4.style.position = 'fixed';
@@ -83,6 +88,8 @@ fab4.addEventListener('click', () => {
 	seated.import(JSON.parse(localStorage.getItem('data') || ''));
 });
 document.body.appendChild(fab4);
+
+// TOGGLE EDIT
 let fab5 = document.createElement('div');
 fab5.style.backgroundColor = 'cyan';
 fab5.style.position = 'fixed';
@@ -100,6 +107,32 @@ fab5.addEventListener('click', () => {
 	seated.setEditionMode(!seated.editMode);
 });
 document.body.appendChild(fab5);
+
+// NEW TABLE
+let fab6 = document.createElement('div');
+fab6.style.backgroundColor = 'cyan';
+fab6.style.position = 'fixed';
+fab6.style.bottom = '50px';
+fab6.style.left = '250px';
+fab6.style.width = '100px';
+fab6.style.height = '100px';
+fab6.style.borderRadius = '50%';
+fab6.style.zIndex = '5';
+fab6.innerHTML = 'Table';
+fab6.style.display = 'grid';
+fab6.style.placeContent = 'center';
+fab6.style.cursor = 'pointer';
+fab6.addEventListener('click', (click) => {
+	console.log(click);
+	seated.createTable({
+		width: 50,
+		height: 100,
+		color: 'gray',
+		data: { row: 'B', number: 14 },
+	});
+});
+document.body.appendChild(fab6);
+
 
 let container = document.createElement('div');
 container.id = 'container';

@@ -8,5 +8,5 @@
 		"declaration": true,
 		"lib": ["es2021", "dom"]
 	},
-	"include": ["src/v0"]
+	"include": ["src/v0", "src/engine"]
 }
