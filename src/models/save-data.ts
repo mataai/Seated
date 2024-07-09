@@ -1,17 +1,28 @@
-export interface SeatedSeatSaveData {
+import { Vector2d } from "./konva.models";
+
+export interface SeatedSeatSaveData<T = any> {
 	internalId: string;
-	data: any;
-	shape: { x: number; y: number; stroke: string; radius: number; fill: string; id: string; strokeWidth: number };
+	data: T;
+	shape: {
+		stroke: string;
+		radius: number;
+		fill: string;
+		id: string;
+		strokeWidth: number;
+	} & Vector2d;
 }
 
-export interface SeatedTableSaveData{
+export interface SeatedRowSaveData<T = any> {
 	internalId: string;
-	data: any;
-	shape: { x: number; y: number;width:number; height:number;rotation:number; fill: string; id: string;};
+	position: Vector2d;
+	seats: SeatedSeatSaveData<T>[];
 }
 
-export interface SeatedSaveData {
-	dimentions: { width: number; height: number };
-	seats: SeatedSeatSaveData[];
-	tables: SeatedTableSaveData[];
+export interface SeatedSaveData<T = any> {
+	dimentions: {
+		width: number;
+		height: number;
+	};
+	seats: SeatedSeatSaveData<T>[];
+	rows: SeatedRowSaveData<T>[];
 }

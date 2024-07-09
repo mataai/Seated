@@ -2,6 +2,19 @@ import Seated from '../src';
 import './index.css';
 
 var seated: Seated;
+var rowCreationMode = false;
+
+const sidebar = document.createElement('div');
+
+sidebar.style.width = '200px';
+sidebar.style.height = '100%';
+sidebar.style.backgroundColor = 'gray';
+sidebar.style.position = 'fixed';
+sidebar.style.top = '0';
+sidebar.style.right = '0';
+sidebar.style.zIndex = '5';
+document.body.appendChild(sidebar);
+
 
 // NEW SEAT
 let fab = document.createElement('div');
@@ -19,11 +32,13 @@ fab.style.placeContent = 'center';
 fab.style.cursor = 'pointer';
 fab.addEventListener('click', (click) => {
 	console.log(click);
-	seated.createSeat({
-		radius: 5,
-		color: 'red',
-		data: { row: 'B', number: 14 },
-	});
+	rowCreationMode = !rowCreationMode;
+
+	// seated.createSeat({
+	// 	radius: 5,
+	// 	color: 'red',
+	// 	data: { row: 'B', number: 14 },
+	// });
 });
 document.body.appendChild(fab);
 
@@ -108,37 +123,21 @@ fab5.addEventListener('click', () => {
 });
 document.body.appendChild(fab5);
 
-// NEW TABLE
-let fab6 = document.createElement('div');
-fab6.style.backgroundColor = 'cyan';
-fab6.style.position = 'fixed';
-fab6.style.bottom = '50px';
-fab6.style.left = '250px';
-fab6.style.width = '100px';
-fab6.style.height = '100px';
-fab6.style.borderRadius = '50%';
-fab6.style.zIndex = '5';
-fab6.innerHTML = 'Table';
-fab6.style.display = 'grid';
-fab6.style.placeContent = 'center';
-fab6.style.cursor = 'pointer';
-fab6.addEventListener('click', (click) => {
-	console.log(click);
-	seated.createTable({
-		width: 50,
-		height: 100,
-		color: 'gray',
-		data: { row: 'B', number: 14 },
-	});
-});
-document.body.appendChild(fab6);
-
-
 let container = document.createElement('div');
 container.id = 'container';
 container.style.height = '100%';
 
 document.body.appendChild(container);
+
+container.addEventListener('click', (click) => {
+	if (rowCreationMode) {
+		seated.createRow({
+			x: click.offsetX,
+			y: click.offsetY,
+		});
+		rowCreationMode = false;
+	}
+})
 
 seated = new Seated(container, true);
 seated?.createSeat({
@@ -151,6 +150,9 @@ seated?.createSeat({
 
 seated.seatEventObservable$.subscribe({
 	next: (event) => {
-		console.log(event);
+		if (event.type === 'click') {
+			console.log("banana", event.data)
+			console.log(seated.selected)
+		}
 	},
 });

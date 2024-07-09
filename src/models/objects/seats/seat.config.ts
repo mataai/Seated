@@ -5,4 +5,5 @@ export interface SeatConfig {
 	radius: number;
 	color: string;
 	data?: any;
+	parentId?: string;
 }

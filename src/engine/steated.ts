@@ -1,19 +1,32 @@
 import Konva from 'konva';
 import { Observable, Subject } from 'rxjs';
-import { NIL, v4 as uuidv4 } from 'uuid';
-import { KonvaOutput, Seat, SeatConfig, SeatedConst, SeatedSaveData, SeatedSeatSaveData, SeatedTableSaveData, SeatEvent } from '../models';
+import { v4 as uuidv4 } from 'uuid';
+import {
+	KonvaOutput,
+	Row,
+	Seat,
+	SeatConfig,
+	SeatedConst,
+	SeatedSaveData,
+	SeatedSeatSaveData,
+	SeatEvent
+} from '../models';
 import { Vector2d } from '../models/konva.models';
-import { TableConfig } from '../models/objects/tables/table.config';
-import { Table } from '../models/objects/tables/table';
+import { KeydownTracker } from './keydown-tracker';
 
 export class Seated {
 	private _stage: Konva.Stage;
 	private _seatLayer: Konva.Layer;
+	private _rows: Row[] = [];
 	private _seats: Seat[] = [];
-	private _tables: Table[] = [];
-
+	private _selected: Seat | Row | Row[] | Seat[] | null = null;
+	// last position of selected seat
+	private _lastPosition: Vector2d | null = null;
 	private _importedData?: SeatedSaveData;
 
+	public get selected() {
+		return this._selected;
+	}
 
 	public get editMode() {
 		return this._editionMode;
@@ -30,6 +43,8 @@ export class Seated {
 			width: _container.getBoundingClientRect().width,
 			height: _container.getBoundingClientRect().height,
 		});
+		// Initialize tracking of keydown events
+		KeydownTracker.getInstance();
 		this._seatLayer = new Konva.Layer({ name: 'seatLayer', draggable: false });
 		this._stage.add(this._seatLayer);
 		this._stage.container().style.backgroundColor = '#333333'; // Change background color
@@ -42,11 +57,10 @@ export class Seated {
 
 	public setEditionMode(editionMode: boolean): void {
 		this._editionMode = editionMode;
-		console.log(this._editionMode);
 		this._seats.forEach((seat) => seat.shape.draggable(this._editionMode));
 	}
 
-	public createSeat(seatConfig: SeatConfig): void {
+	public createSeat(seatConfig: SeatConfig): Seat {
 		const id = uuidv4();
 		const circle = new Konva.Circle({
 			x: seatConfig.x ?? this._container.getBoundingClientRect().width / 2,
@@ -59,11 +73,28 @@ export class Seated {
 			draggable: this._editionMode,
 		});
 
-		const seat = new Seat(id, null, circle);
+		const seat = new Seat(id, null, circle, seatConfig.parentId);
 
 		this._seats.push(seat);
 
 		circle.on('click tap', () => {
+			if (this._editionMode) {
+				if (!seat.parentId) {
+					if (this._selected) {
+						if (KeydownTracker.getInstance().isKeyDown('Control')) {
+							if (Array.isArray(this._selected) && this._selected.includes(seat)) {
+								this._selected.push(seat);
+							} else {
+								this._selected = [this._selected, seat];
+							}
+						}
+					} else {
+						this._selected = seat;
+					}
+				} else {
+					this._selected = this._rows.find((row) => row.internalId === seat.parentId) || null;
+				}
+			}
 			this._seatEventSubject.next({ type: 'click', data: seat });
 		});
 		circle.on('dragstart', () => {
@@ -83,49 +114,33 @@ export class Seated {
 		});
 
 		this._seatLayer.add(circle);
+		return seat;
 	}
 
-	public createTable(tableConfig: TableConfig): void {
+	public createRow(vector: Vector2d): Row {
 		const id = uuidv4();
-		var tr = new Konva.Transformer({
-			boundBoxFunc: function (oldBoundBox, newBoundBox) {
-			  // "boundBox" is an object with
-			  // x, y, width, height and rotation properties
-			  // transformer tool will try to fit nodes into that box
-			  return newBoundBox;
-			},
-		  });
+		const row = new Row(id, vector);
+		row.seatCount = 1;
+		const seatConfig: SeatConfig = {
+			x: vector.x,
+			y: vector.y,
+			radius: SeatedConst.SEAT_RADIUS,
+			color: SeatedConst.SEAT_COLOR,
+			parentId: id,
+			id: uuidv4(),
+		};
 
-		const rect = new Konva.Rect({
-			x: tableConfig.x ?? this._container.getBoundingClientRect().width / 2,
-			y: tableConfig.y ?? this._container.getBoundingClientRect().height / 2,
-			rotation: tableConfig.rotation,
-			width: tableConfig.width,
-			height: tableConfig.height,
-			fill: tableConfig.color,
-			id: tableConfig.id || id,
-			draggable: this._editionMode,
-		});
+		row.seats.push(this.createSeat(seatConfig));
+		this._rows.push(row);
 
-		const table = new Table(id, null, rect);
-
-		this._tables.push(table);
-
-		this._seatLayer.add(rect);
-		this._seatLayer.add(tr);
-		tr.nodes([rect]);
+		return row;
 	}
 
 	public import(data?: SeatedSaveData): void {
 		this._seats.forEach((seat) => {
 			seat.shape.destroy();
 		});
-		this._tables.forEach((table) => {
-			table.shape.destroy();
-		})
 		this._seats = [];
-		this._tables = [];
-		console.log(data);
 		if (!data) {
 			this._createStage(
 				this._container.getBoundingClientRect().width,
@@ -147,18 +162,6 @@ export class Seated {
 					data: seat.data,
 				});
 			});
-			data.tables.forEach((table) =>{
-				this.createTable({
-					x: table.shape.x,
-					y: table.shape.y,
-					width: table.shape.width,
-					height: table.shape.height,
-					rotation: table.shape.rotation,
-					color: table.shape.fill,
-					id:table.internalId,
-					data:table.data
-				});
-			});
 			this._scaleChange();
 		}
 	}
@@ -177,19 +180,14 @@ export class Seated {
 			};
 			return { ...seat, shape: outShape };
 		});
-		const tables: SeatedTableSaveData[] = this._tables.map((table) => {
-			const outShape = {
-				id: table.shape.id(),
-				x: table.shape.x(),
-				y: table.shape.y(),
-				width: table.shape.width() * table.shape.scaleX(),
-				height: table.shape.height() * table.shape.scaleY(),
-				rotation: table.shape.rotation(),
-				fill: table.shape.fill()
-			};
-			return { ...table, shape: outShape };
-		});
-		return { tables:tables ,seats: seats, dimentions: { width: output.attrs.width!, height: output.attrs.height! } };
+		return {
+			seats: seats,
+			rows: [],
+			dimentions: {
+				width: output.attrs.width!,
+				height: output.attrs.height!
+			}
+		};
 	}
 
 	private _createStage(x: number, y: number, container: HTMLDivElement): void {
@@ -214,58 +212,38 @@ export class Seated {
 		this._stage.scale({ x: scale, y: scale });
 	}
 
-
-	// last position of selected seat
-	private _lastPosition:Vector2d | null = null;
-
-	private _initiateClipCheck():void{
-		this.seatEventObservable$.subscribe(({type,data:selectedSeat}) => {
-			if(type === "dragmove"){
-				//Check collision with table
-				for(let element of this._tables){
-					const selectedSeatX = selectedSeat.shape.x();
-					const selectedSeatY = selectedSeat.shape.y();
-
-					// Checks clipping for each axis
-					const isClippingX = selectedSeatX >= element.shape.x() - selectedSeat.shape.width()/2 && selectedSeatX <= (element.shape.x() + (element.shape.width()*element.shape.scaleX()) + selectedSeat.shape.width()/2);
-					const isClippingY =  selectedSeatY >= element.shape.y() - selectedSeat.shape.width()/2 && selectedSeatY <= (element.shape.y() + (element.shape.height()*element.shape.scaleY()) + selectedSeat.shape.width()/2);
-
-					if(this._lastPosition != null && isClippingX && isClippingY){
-						selectedSeat.shape.setPosition(this._lastPosition); // reverts selected seat's position
-						break;
-					}
-
-				}
-
-				for(let element of this._seats){
+	private _initiateClipCheck(): void {
+		this.seatEventObservable$.subscribe(({ type, data: selectedSeat }) => {
+			if (type === "dragmove") {
+				for (let element of this._seats) {
 
 					// Prevent item from clipping with itself
-					if(element.internalId == selectedSeat.internalId){
+					if (element.internalId == selectedSeat.internalId) {
 						continue;
 					}
 
-					const isClippingX = Math.abs(selectedSeat.shape.x() - element.shape.x()) <  SeatedConst.SEAT_CLIP_RADIUS;
-					const isClippingY = Math.abs(selectedSeat.shape.y() - element.shape.y()) <  SeatedConst.SEAT_CLIP_RADIUS;
+					const isClippingX = Math.abs(selectedSeat.shape.x() - element.shape.x()) < SeatedConst.SEAT_CLIP_RADIUS;
+					const isClippingY = Math.abs(selectedSeat.shape.y() - element.shape.y()) < SeatedConst.SEAT_CLIP_RADIUS;
 
 					// finding magnitude(distance) between two points
-					const vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots : Vector2d = {x: element.shape.x() - selectedSeat.shape.x(),y: element.shape.y() - selectedSeat.shape.y()};
-					const magnitude = Math.sqrt(Math.pow(vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots.x,2) + Math.pow(vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots.y,2));
+					const vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots: Vector2d = { x: element.shape.x() - selectedSeat.shape.x(), y: element.shape.y() - selectedSeat.shape.y() };
+					const magnitude = Math.sqrt(Math.pow(vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots.x, 2) + Math.pow(vectorDistanceBetweenTwoPointsToPreventIdiotsFromBeingIdiots.y, 2));
 
 
 					// Idiot proof checkup to prevent people from stacking seats
-					if(this._lastPosition != null && magnitude <= element.shape.width()){
+					if (this._lastPosition != null && magnitude <= element.shape.width()) {
 						selectedSeat.shape.setPosition(this._lastPosition);
 						break;
 					}
 
 					// Clips dragged seat on the x axis
-					if(isClippingX && !isClippingY){
-						selectedSeat.shape.setPosition({x:element.shape.x(), y:selectedSeat.shape.y()})
+					if (isClippingX && !isClippingY) {
+						selectedSeat.shape.setPosition({ x: element.shape.x(), y: selectedSeat.shape.y() })
 						break;
 					}
 					// Clips dragged seat on the y axis
-					if(isClippingY && !isClippingX){
-						selectedSeat.shape.setPosition({x:selectedSeat.shape.x(), y:element.shape.y()})
+					if (isClippingY && !isClippingX) {
+						selectedSeat.shape.setPosition({ x: selectedSeat.shape.x(), y: element.shape.y() })
 						break;
 					}
 
