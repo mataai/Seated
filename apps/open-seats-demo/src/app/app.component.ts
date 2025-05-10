@@ -42,6 +42,26 @@ export class AppComponent implements AfterViewInit {
 		});
 	}
 
+  public addBackground(): void {
+    this.chart.setBackground(
+      'https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=MnwzNjUyOXwwfDF8c2VhcmNofDJ8fGJhY2tncm91bmR8ZW58MHx8fHwxNjg5NTQ1NzA3&ixlib=rb-4.0.3&q=80&w=1080'
+    );
+  }
+
+  public onFileSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    console.log('file', file);
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageUrl = e.target?.result as string;
+        this.chart.setBackground(imageUrl);
+      };
+      reader.readAsDataURL(file);
+    }
+
+  }
+
 	public save(): void {
 		localStorage.setItem('seated', JSON.stringify(this.chart.export()));
 	}

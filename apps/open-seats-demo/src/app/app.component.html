@@ -1,7 +1,9 @@
 <div #chartContainer></div>
 
 
-<button id="fabC" (click)="addChair()">C</button>
-<button id="fabT" (click)="addTable()">T</button>
-<button id="fabS" (click)="save()">S</button>
-<button id="fabL" (click)="load()">L</button>
+<button id="fabC" (click)="addChair()">Chair</button>
+<button id="fabT" (click)="addTable()">Table</button>
+<button id="fabS" (click)="save()">Save</button>
+<button id="fabL" (click)="load()">Load</button>
+<button id="fabB" (click)="addBackground()">Background</button>
+<input id="fabI" type="file" (change)="onFileSelected($event)" />

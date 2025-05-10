@@ -6,7 +6,7 @@ import { SeatedSeatSaveData, SeatedTableSaveData, Vector2d } from '../models';
 import { EngineState } from '../engine/engine.state';
 import { SeatedConst } from '../const';
 
-export class SeatMediator extends Observable<SeatMediator> {
+export class SeatMediator {
 	private _tableEventSubject: Subject<SeatedEvent<Table>> = new Subject<SeatedEvent<Table>>();
 	private _seatEventSubject: Subject<SeatedEvent<Seat>> = new Subject<SeatedEvent<Seat>>();
 	public get seatEventObservable$(): Observable<SeatedEvent<Seat>> {
@@ -18,7 +18,6 @@ export class SeatMediator extends Observable<SeatMediator> {
 	private _lastPosition: Vector2d | null = null;
 
 	constructor() {
-		super();
 		this._initiateObservers();
 	}
 

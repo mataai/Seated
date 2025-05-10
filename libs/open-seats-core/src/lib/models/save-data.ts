@@ -14,4 +14,5 @@ export interface SeatedSaveData {
 	dimentions: { width: number; height: number };
 	seats: SeatedSeatSaveData[];
 	tables: SeatedTableSaveData[];
+  background: string;
 }

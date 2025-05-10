@@ -2,7 +2,7 @@ div {
 	height: 100vh;
 }
 
-button {
+button, input {
 	height: 50px;
 	width: 50px;
 	background-color: red;
@@ -25,6 +25,16 @@ button {
 }
 
 #fabL {
-	bottom: 125px;
+	bottom: 50px;
 	left: 5px;
+}
+
+#fabB {
+	bottom: 100px;
+	left: 5px;
+}
+
+#fabI{
+  bottom: 150px;
+  left: 5px;
 }
