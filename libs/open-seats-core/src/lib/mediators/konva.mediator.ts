@@ -24,8 +24,9 @@ export class KonvaMediator {
       container: container, // id of container <div>
       width: x,
       height: y,
+      draggable: true,
     });
-    this._seatLayer = new Konva.Layer({ name: 'seatLayer', draggable: false });
+    this._seatLayer = new Konva.Layer({ name: 'seatLayer' });
     stage.add(this._seatLayer);
     this._seatLayer.draw();
     stage.on('wheel', this._handleScroll.bind(this));
