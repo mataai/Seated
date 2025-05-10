@@ -2,6 +2,7 @@ import { AfterViewInit, Component, ElementRef, ViewChild } from '@angular/core';
 import { Seated } from '@open-seats/core';
 
 @Component({
+  standalone: true,
 	selector: 'open-seats-root',
 	templateUrl: './app.component.html',
 	styleUrls: ['./app.component.scss'],
