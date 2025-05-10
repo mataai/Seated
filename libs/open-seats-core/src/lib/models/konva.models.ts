@@ -79,5 +79,5 @@ export interface Layer {
 export interface KonvaOutput {
 	attrs: ICanvasConfig;
 	className: string;
-	children: Layer[];
+	children?: Layer[];
 }

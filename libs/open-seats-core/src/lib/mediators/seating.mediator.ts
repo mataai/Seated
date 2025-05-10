@@ -86,7 +86,8 @@ export class SeatMediator extends Observable<SeatMediator> {
 					rotation: table.shape.rotation(),
 					fill: table.shape.fill(),
 				};
-				return { ...table, shape: outShape };
+        // todo fix type hack
+				return { ...table, shape: outShape } as SeatedTableSaveData;
 			}),
 			seats: this._seats.map((seat) => {
 				const outShape = {
@@ -98,7 +99,8 @@ export class SeatMediator extends Observable<SeatMediator> {
 					stroke: seat.shape.stroke(),
 					strokeWidth: seat.shape.strokeWidth(),
 				};
-				return { ...seat, shape: outShape };
+        // todo fix type hack
+				return { ...seat, shape: outShape } as SeatedSeatSaveData;
 			}),
 		};
 	}
