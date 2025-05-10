@@ -15,7 +15,7 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "core": ["libs/open-seats-core/src/index.ts"]
+      "@open-seats/core": ["libs/open-seats-core/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
