@@ -1,20 +1,32 @@
 import Konva from 'konva';
 import { KonvaOutput, SeatedSaveData } from '../models';
+import { container, injectable, singleton } from 'tsyringe';
+import { ObjectMediator } from './object.mediator';
+import { BackgroundFactory } from '../factory/background.factory';
 
+@singleton()
 export class KonvaMediator {
-  public static instance: KonvaMediator;
   private _stage: Konva.Stage;
   private _seatLayer!: Konva.Layer;
   private _backgroundLayer!: Konva.Layer;
   private _background!: Konva.Image | null;
 
+  public get stage(): Konva.Stage {
+    return this._stage;
+  }
+
   constructor(private _container: HTMLDivElement) {
-    KonvaMediator.instance = this;
     this._stage = this.createStage(
       _container.getBoundingClientRect().width,
       _container.getBoundingClientRect().height,
       _container
     );
+
+    if (this._backgroundLayer) {
+      container
+        .resolve(ObjectMediator)
+        .setBackgroundLayer(this._backgroundLayer);
+    }
   }
 
   public createStage(
@@ -64,23 +76,7 @@ export class KonvaMediator {
   }
 
   public setBackground(image: string) {
-    if (this._background) {
-      this._background.destroy();
-      this._background = null;
-    }
-    Konva.Image.fromURL(image, (image) => {
-      this._background = image;
-      this._background.setAttrs({
-        x: 0,
-        y: 0,
-        width: this._stage.width(),
-        height: this._stage.height(),
-      });
-      this._backgroundLayer.add(this._background);
-      this._backgroundLayer.draw();
-    });
-    this._backgroundLayer.add(this._background!);
-    this._backgroundLayer.draw();
+    container.resolve(BackgroundFactory).createSeat(image);
   }
 
   private _handleScroll(e: Konva.KonvaEventObject<WheelEvent>) {

@@ -7,6 +7,8 @@ import {
 } from '../models';
 import { SeatFactory, TableFactory } from '../factory';
 import { SeatMediator, KonvaMediator } from '../mediators';
+import { container } from 'tsyringe';
+import Konva from 'konva';
 
 export class Seated {
   private _konvaMediator: KonvaMediator;
@@ -23,6 +25,7 @@ export class Seated {
     private _editionMode: boolean
   ) {
     this._konvaMediator = new KonvaMediator(_container);
+    container.registerInstance(KonvaMediator, this._konvaMediator);
     this._tableFactory = new TableFactory(this._konvaMediator);
   }
 

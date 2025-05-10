@@ -7,6 +7,8 @@
     "importHelpers": true,
     "noImplicitOverride": true,
     "noImplicitReturns": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true
   },
