@@ -1,5 +1,5 @@
 import Konva from 'konva';
-import { Observable, Subject } from 'rxjs';
+import { filter, Observable, Subject, tap } from 'rxjs';
 import { NIL, v4 as uuidv4 } from 'uuid';
 import { KonvaOutput, Seat, SeatConfig, SeatedConst, SeatedSaveData, SeatedSeatSaveData, SeatedTableSaveData, SeatEvent } from '../models';
 import { Vector2d } from '../models/konva.models';
@@ -11,6 +11,8 @@ export class Seated {
 	private _seatLayer: Konva.Layer;
 	private _seats: Seat[] = [];
 	private _tables: Table[] = [];
+
+	private _lastCircleSelected: Konva.Circle | null = null;
 
 	private _importedData?: SeatedSaveData;
 
@@ -38,6 +40,7 @@ export class Seated {
 			this._scaleChange();
 		});
 		this._initiateClipCheck();
+		this._setLastPosition();
 	}
 
 	public setEditionMode(editionMode: boolean): void {
@@ -49,8 +52,8 @@ export class Seated {
 	public createSeat(seatConfig: SeatConfig): void {
 		const id = uuidv4();
 		const circle = new Konva.Circle({
-			x: seatConfig.x ?? this._container.getBoundingClientRect().width / 2,
-			y: seatConfig.y ?? this._container.getBoundingClientRect().height / 2,
+			x: seatConfig.x ?? (this._lastCircleSelected ? this._lastCircleSelected.x() + 20 : this._container.getBoundingClientRect().width / 2),
+			y: seatConfig.y ?? this._lastCircleSelected?.y() ?? this._container.getBoundingClientRect().height / 2,
 			stroke: 'black',
 			radius: seatConfig.radius,
 			fill: seatConfig.color,
@@ -61,6 +64,7 @@ export class Seated {
 
 		const seat = new Seat(id, null, circle);
 
+		this._lastCircleSelected = circle;
 		this._seats.push(seat);
 
 		circle.on('click tap', () => {
@@ -214,6 +218,13 @@ export class Seated {
 		this._stage.scale({ x: scale, y: scale });
 	}
 
+	private _setLastPosition(): void {
+		this.seatEventObservable$.subscribe(({ type, data }) => {
+			if (type === 'dragstart') {
+				this._lastCircleSelected = data.shape as Konva.Circle;
+			}
+		});
+	}
 
 	// last position of selected seat
 	private _lastPosition:Vector2d | null = null;
