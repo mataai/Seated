@@ -34,7 +34,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'dist/apps/open-seats-demo'
+          path: 'dist/apps/open-seats-demo/browser'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
