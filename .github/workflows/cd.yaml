@@ -27,7 +27,7 @@ jobs:
         run: npm install
 
       - name: Build the application
-        run: npx nx build open-seats-demo --prod
+        run: npx nx build ng-demo --prod
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

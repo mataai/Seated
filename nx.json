@@ -93,5 +93,5 @@
       "preVersionCommand": "npx nx run-many -t build"
     }
   },
-  "defaultProject": "open-seats-demo"
+  "defaultProject": "ng-demo"
 }

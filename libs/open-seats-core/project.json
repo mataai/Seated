@@ -1,5 +1,5 @@
 {
-  "name": "OpenSeatsCore",
+  "name": "core",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/open-seats-core/src",
   "projectType": "library",
