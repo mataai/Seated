@@ -16,7 +16,11 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@open-seats/core": ["libs/open-seats-core/src/index.ts"]
+      "@open-seats/core": ["libs/core/src/index.ts"],
+      "@open-seats/renderer": ["libs/renderer/src/index.ts"],
+      "@open-seats/viewer": ["libs/viewer/src/index.ts"],
+      "@open-seats/editor": ["libs/editor/src/index.ts"],
+      "@open-seats/angular": ["libs/angular/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

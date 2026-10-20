@@ -1,0 +1,14 @@
+{
+  "name": "@open-seats/angular",
+  "version": "0.0.1",
+  "peerDependencies": {
+    "@angular/common": "^19.0.0",
+    "@angular/core": "^19.0.0",
+    "@open-seats/core": "workspace:*",
+    "@open-seats/viewer": "workspace:*",
+    "@open-seats/editor": "workspace:*"
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  }
+}

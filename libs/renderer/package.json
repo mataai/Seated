@@ -1,0 +1,11 @@
+{
+  "name": "@open-seats/renderer",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "dependencies": {
+    "@open-seats/core": "workspace:*",
+    "konva": "^9.3.20"
+  }
+}

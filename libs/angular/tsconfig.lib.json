@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "../../dist/out-tsc",
+    "declaration": true,
+    "declarationMap": false,
+    "inlineSources": true,
+    "types": [],
+    "paths": {
+      "@open-seats/core": ["dist/libs/core/index.d.ts"],
+      "@open-seats/renderer": ["dist/libs/renderer/index.d.ts"],
+      "@open-seats/viewer": ["dist/libs/viewer/index.d.ts"],
+      "@open-seats/editor": ["dist/libs/editor/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.spec.ts", "tests/**/*.ts"]
+}
