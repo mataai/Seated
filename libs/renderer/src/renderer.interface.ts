@@ -32,7 +32,11 @@ export interface RendererOptions {
   selectedSeatIds?: string[];
   selectedStyle?: SelectedStyle;
   hoverStyle?: HoverStyle;
-  interactive?: boolean;
+  draggableNodes?: boolean;
+  onNodeClick?: (nodeId: string, nodeType: 'row' | 'zone' | 'building', evt: MouseEvent | TouchEvent) => void;
+  onNodeDragStart?: (nodeId: string, nodeType: 'row' | 'zone' | 'building') => void;
+  onNodeDragMove?: (nodeId: string, nodeType: 'row' | 'zone' | 'building', pos: { x: number; y: number }) => void;
+  onNodeDragEnd?: (nodeId: string, nodeType: 'row' | 'zone' | 'building', pos: { x: number; y: number }, evt: MouseEvent | TouchEvent) => void;
   onSeatClick?: (ctx: RenderSeatContext, evt: MouseEvent | TouchEvent) => void;
   onSeatHover?: (ctx: RenderSeatContext, evt: MouseEvent) => void;
   onSeatHoverEnd?: (ctx: RenderSeatContext, evt: MouseEvent) => void;
@@ -51,6 +55,7 @@ export interface Renderer {
   clearSelection(): void;
   getSelectedSeatIds(): string[];
   setHoveredSeat(seatId: string | null): void;
+  setDraggableNodes(enabled: boolean): void;
   zoomIn(factor?: number): void;
   zoomOut(factor?: number): void;
   resetZoom(): void;

@@ -108,6 +108,7 @@
           [floorplan]="floorplan"
           [tool]="currentTool"
           (change)="onFloorplanChanged($event)"
+          (violationsUpdated)="onViolationsUpdated($event)"
         ></seats-editor>
       </div>
 

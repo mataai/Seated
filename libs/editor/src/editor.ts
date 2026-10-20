@@ -80,6 +80,23 @@ export class Editor implements EditorInstance {
     this.renderer = createRenderer({
       container: this.editorCanvasContainer,
       floorplan: this.floorplan,
+      draggableNodes: this.activeTool === 'select',
+      onNodeClick: (nodeId) => {
+        if (this.activeTool === 'select') {
+          this.selectNodes([nodeId]);
+        }
+      },
+      onNodeDragEnd: (nodeId, _nodeType, pos) => {
+        if (this.activeTool === 'select') {
+          queueMicrotask(() => {
+            const success = this.moveNode(nodeId, pos);
+            if (!success) {
+              // Revert visually to valid position if rejected by canPlace
+              this.renderer?.load(this.floorplan);
+            }
+          });
+        }
+      },
     });
   }
 
@@ -153,6 +170,7 @@ export class Editor implements EditorInstance {
 
   public setTool(tool: ToolType): void {
     this.activeTool = tool;
+    this.renderer?.setDraggableNodes(tool === 'select');
     this.emitter.emit('toolChange', tool);
   }
 
@@ -219,7 +237,9 @@ export class Editor implements EditorInstance {
         this.embeddedViewer.destroy();
         this.embeddedViewer = undefined;
       }
-      const previewEl = this.container.querySelector('.open-seats-preview-viewer');
+      const previewEl = this.container.querySelector(
+        '.open-seats-preview-viewer'
+      );
       if (previewEl) {
         previewEl.remove();
       }
@@ -297,7 +317,12 @@ export class Editor implements EditorInstance {
         ...this.floorplan,
         buildings: [...this.floorplan.buildings, newBuilding],
       };
-      const violations = canPlace(testPlan, id, {}, { tolerance: this.rules.tolerance });
+      const violations = canPlace(
+        testPlan,
+        id,
+        {},
+        { tolerance: this.rules.tolerance }
+      );
       if (violations.length > 0) {
         return null;
       }
@@ -345,7 +370,12 @@ export class Editor implements EditorInstance {
       const targetB = testPlan.buildings.find((b) => b.id === buildingId)!;
       targetB.zones.push(newZone);
 
-      const violations = canPlace(testPlan, id, {}, { tolerance: this.rules.tolerance });
+      const violations = canPlace(
+        testPlan,
+        id,
+        {},
+        { tolerance: this.rules.tolerance }
+      );
       if (violations.length > 0) {
         return null;
       }
@@ -444,7 +474,12 @@ export class Editor implements EditorInstance {
       const targetB = testPlan.buildings.find((b) => b.id === buildingId)!;
       targetB.rows.push(newRow);
 
-      const violations = canPlace(testPlan, id, {}, { tolerance: this.rules.tolerance });
+      const violations = canPlace(
+        testPlan,
+        id,
+        {},
+        { tolerance: this.rules.tolerance }
+      );
       if (violations.length > 0) {
         return null;
       }
@@ -482,15 +517,15 @@ export class Editor implements EditorInstance {
     }
 
     const currentMaxIndex =
-      row.seats.length > 0
-        ? Math.max(...row.seats.map((s) => s.index))
-        : -1;
+      row.seats.length > 0 ? Math.max(...row.seats.map((s) => s.index)) : -1;
 
     // Check if slot on currentMaxIndex is free for requested side
     const slotFilled = row.seats.some(
       (s) => s.index === currentMaxIndex && s.side === seatSide
     );
-    const newIndex = slotFilled ? currentMaxIndex + 1 : Math.max(0, currentMaxIndex);
+    const newIndex = slotFilled
+      ? currentMaxIndex + 1
+      : Math.max(0, currentMaxIndex);
 
     const newSeat: Seat = {
       id: NumberingService.nextSeatId(),
@@ -535,7 +570,6 @@ export class Editor implements EditorInstance {
 
   public moveNode(nodeId: string, newPosition: Vec2): boolean {
     const snapped = this.snap(newPosition);
-
     if (this.rules.enforce) {
       const violations = canPlace(
         this.floorplan,
@@ -544,6 +578,7 @@ export class Editor implements EditorInstance {
         { tolerance: this.rules.tolerance }
       );
       if (violations.length > 0) {
+        this.emitter.emit('violationsUpdated', violations);
         return false;
       }
     }
@@ -596,7 +631,7 @@ export class Editor implements EditorInstance {
         return true;
       }
     }
-
+    console.log('no move');
     return false;
   }
 
@@ -704,7 +739,8 @@ export class Editor implements EditorInstance {
       targetBuilding.position,
       targetBuilding.rotation
     );
-    const newLocalRot = row.rotation + sourceBuilding.rotation - targetBuilding.rotation;
+    const newLocalRot =
+      row.rotation + sourceBuilding.rotation - targetBuilding.rotation;
 
     const proposedRow: Row = {
       ...row,
@@ -715,8 +751,12 @@ export class Editor implements EditorInstance {
     if (this.rules.enforce) {
       // Test containment and overlap in target building
       const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
-      const testSourceB = testPlan.buildings.find((b) => b.id === sourceBuilding!.id)!;
-      const testTargetB = testPlan.buildings.find((b) => b.id === targetBuildingId)!;
+      const testSourceB = testPlan.buildings.find(
+        (b) => b.id === sourceBuilding!.id
+      )!;
+      const testTargetB = testPlan.buildings.find(
+        (b) => b.id === targetBuildingId
+      )!;
 
       testSourceB.rows = testSourceB.rows.filter((r) => r.id !== rowId);
       testTargetB.rows.push(proposedRow);
@@ -738,7 +778,9 @@ export class Editor implements EditorInstance {
     const command: Command = {
       name: `Reparent Row ${row.label} to ${targetBuilding.label}`,
       execute: () => {
-        sourceBuilding!.rows = sourceBuilding!.rows.filter((r) => r.id !== rowId);
+        sourceBuilding!.rows = sourceBuilding!.rows.filter(
+          (r) => r.id !== rowId
+        );
         row!.position = proposedRow.position;
         row!.rotation = proposedRow.rotation;
         targetBuilding.rows.push(row!);
@@ -852,7 +894,9 @@ export class Editor implements EditorInstance {
     const slotFilled = targetRow.seats.some(
       (s) => s.index === currentMaxIdx && s.side === targetSide
     );
-    const newIndex = slotFilled ? currentMaxIdx + 1 : Math.max(0, currentMaxIdx);
+    const newIndex = slotFilled
+      ? currentMaxIdx + 1
+      : Math.max(0, currentMaxIdx);
 
     const proposedSeat: Seat = {
       ...movedSeat,
@@ -1005,7 +1049,10 @@ export class Editor implements EditorInstance {
         { seatSpacing },
         { tolerance: this.rules.tolerance }
       );
-      if (violations.length > 0) return false;
+      if (violations.length > 0) {
+        this.emitter.emit('violationsUpdated', violations);
+        return false;
+      }
     }
 
     const oldSpacing = targetRow.seatSpacing;

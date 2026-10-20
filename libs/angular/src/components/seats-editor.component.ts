@@ -65,6 +65,7 @@ export class SeatsEditorComponent
   @Output() violationsUpdated = new EventEmitter<Violation[]>();
 
   private editor?: EditorInstance;
+  private lastEmittedPlan?: Floorplan;
 
   constructor(private ngZone: NgZone) {}
 
@@ -78,6 +79,7 @@ export class SeatsEditorComponent
       this.editor.setTool(this.tool);
 
       this.editor.on('change', (plan) => {
+        this.lastEmittedPlan = plan;
         this.ngZone.run(() => this.change.emit(plan));
       });
 
@@ -104,7 +106,13 @@ export class SeatsEditorComponent
 
     this.ngZone.runOutsideAngular(() => {
       if (changes['floorplan'] && this.floorplan) {
-        this.editor!.loadFloorplan(this.floorplan);
+        // Only load if the floorplan did NOT originate from the editor's own change event
+        if (this.floorplan !== this.lastEmittedPlan) {
+          const current = this.editor!.getFloorplan();
+          if (JSON.stringify(current) !== JSON.stringify(this.floorplan)) {
+            this.editor!.loadFloorplan(this.floorplan);
+          }
+        }
       }
 
       if (changes['tool'] && this.tool) {

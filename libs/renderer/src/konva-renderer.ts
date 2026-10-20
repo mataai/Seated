@@ -42,6 +42,8 @@ export class KonvaRenderer implements Renderer {
 
   private seatCircles = new Map<string, Konva.Circle>();
   private seatContexts = new Map<string, RenderSeatContext>();
+  private rowGroups = new Map<string, Konva.Group>();
+  private draggableNodes = false;
 
   private options: RendererOptions;
   private resizeObserver?: ResizeObserver;
@@ -52,6 +54,7 @@ export class KonvaRenderer implements Renderer {
 
   constructor(options: RendererOptions) {
     this.options = options;
+    this.draggableNodes = options.draggableNodes ?? false;
     this.container = options.container;
     this.statusRegistry = options.statusRegistry ?? new StatusRegistry();
 
@@ -189,6 +192,7 @@ export class KonvaRenderer implements Renderer {
     this.floorplan = floorplan;
     this.seatCircles.clear();
     this.seatContexts.clear();
+    this.rowGroups.clear();
 
     this.backgroundLayer.destroyChildren();
     this.sceneLayer.destroyChildren();
@@ -325,6 +329,29 @@ export class KonvaRenderer implements Renderer {
       x: row.position.x,
       y: row.position.y,
       rotation: row.rotation,
+      draggable: this.draggableNodes,
+    });
+    this.rowGroups.set(row.id, rGroup);
+
+    rGroup.on('dragstart', () => {
+      this.options.onNodeDragStart?.(row.id, 'row');
+    });
+
+    rGroup.on('dragmove', () => {
+      this.options.onNodeDragMove?.(row.id, 'row', rGroup.position());
+    });
+
+    rGroup.on('dragend', (e) => {
+      this.options.onNodeDragEnd?.(
+        row.id,
+        'row',
+        rGroup.position(),
+        e.evt as MouseEvent
+      );
+    });
+
+    rGroup.on('click tap', (e) => {
+      this.options.onNodeClick?.(row.id, 'row', e.evt as MouseEvent);
     });
 
     let maxIndex = 0;
@@ -350,8 +377,19 @@ export class KonvaRenderer implements Renderer {
         stroke: row.tableStyle?.stroke ?? '#444444',
         strokeWidth: row.tableStyle?.strokeWidth ?? 1,
         cornerRadius: row.tableStyle?.cornerRadius ?? 4,
-        listening: false,
+        listening: true,
       });
+
+      tableRect.on('mouseenter', () => {
+        if (this.draggableNodes) {
+          this.stage.container().style.cursor = 'move';
+        }
+      });
+
+      tableRect.on('mouseleave', () => {
+        this.stage.container().style.cursor = 'default';
+      });
+
       rGroup.add(tableRect);
     }
 
@@ -578,6 +616,13 @@ export class KonvaRenderer implements Renderer {
     return this.hoveredSeatId;
   }
 
+  public setDraggableNodes(enabled: boolean): void {
+    this.draggableNodes = enabled;
+    for (const group of this.rowGroups.values()) {
+      group.draggable(enabled);
+    }
+  }
+
   public getScale(): number {
     return this.stage.scaleX();
   }
@@ -591,6 +636,7 @@ export class KonvaRenderer implements Renderer {
     this.stage.destroy();
     this.seatCircles.clear();
     this.seatContexts.clear();
+    this.rowGroups.clear();
     this.selectedSeatIds.clear();
   }
 }

@@ -243,5 +243,34 @@ describe('Editor (@open-seats/editor)', () => {
     container.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
     expect(editor.getFloorplan().buildings[0].rows.length).toBe(0);
   });
+
+  it('handles multiple consecutive interactive drags of rows in select mode', async () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const row = editor.createRow('b-1', { x: 100, y: 100 }, 2)!;
+    expect(editor.getTool()).toBe('select');
+
+    // Simulate drag 1 end on the row group via renderer options callback
+    const renderer = (editor as any).renderer;
+    renderer.options.onNodeDragEnd?.(row.id, 'row', { x: 180, y: 160 }, new MouseEvent('mouseup'));
+    await Promise.resolve();
+
+    let updatedRow = editor.getFloorplan().buildings[0].rows[0];
+    expect(updatedRow.position.x).toBe(180);
+    expect(updatedRow.position.y).toBe(160);
+
+    // Simulate drag 2 end to a new position
+    renderer.options.onNodeDragEnd?.(row.id, 'row', { x: 220, y: 200 }, new MouseEvent('mouseup'));
+    await Promise.resolve();
+
+    updatedRow = editor.getFloorplan().buildings[0].rows[0];
+    expect(updatedRow.position.x).toBe(220);
+    expect(updatedRow.position.y).toBe(200);
+
+    // Can undo both drags
+    expect(editor.undo()).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows[0].position.x).toBe(180);
+    expect(editor.undo()).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows[0].position.x).toBe(100);
+  });
 });
 

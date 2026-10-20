@@ -7,6 +7,7 @@ import {
 import {
   SAMPLE_FLOORPLAN,
   type Floorplan,
+  type Violation,
 } from '@open-seats/core';
 import type { ToolType } from '@open-seats/editor';
 import type { RenderSeatContext } from '@open-seats/viewer';
@@ -128,6 +129,15 @@ export class AppComponent {
   public onFloorplanChanged(plan: Floorplan): void {
     this.floorplan = plan;
     this.addLog('change', 'Floorplan modified via editor');
+  }
+
+  public onViolationsUpdated(violations: Violation[]): void {
+    if (violations.length > 0) {
+      const summary = violations
+        .map((v) => `${v.rule} (${v.ids.join(', ')})`)
+        .join('; ');
+      this.addLog('violation', summary);
+    }
   }
 
   public reserveSelected(): void {
