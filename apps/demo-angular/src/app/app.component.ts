@@ -1,4 +1,4 @@
-import { Component, ViewChild } from '@angular/core';
+import { Component, ViewChild, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   SeatsEditorComponent,
@@ -17,6 +17,7 @@ import type { RenderSeatContext } from '@open-seats/viewer';
   selector: 'open-seats-root',
   imports: [CommonModule, SeatsViewerComponent, SeatsEditorComponent],
   templateUrl: './app.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./app.component.scss'],
 })
 export class AppComponent {

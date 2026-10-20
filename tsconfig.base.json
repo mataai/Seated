@@ -21,7 +21,11 @@
       "@open-seats/viewer": ["libs/viewer/src/index.ts"],
       "@open-seats/editor": ["libs/editor/src/index.ts"],
       "@open-seats/angular": ["libs/angular/src/index.ts"]
-    }
+    },
+    "noUncheckedSideEffectImports": false,
+    "types": ["*"],
+    "esModuleInterop": false,
+    "ignoreDeprecations": "6.0"
   },
   "exclude": ["node_modules", "tmp"]
 }

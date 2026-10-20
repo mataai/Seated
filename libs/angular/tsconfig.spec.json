@@ -2,7 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
-    "types": ["vitest/globals", "vitest/importMeta", "node", "vitest"]
+    "types": ["vitest/globals", "vitest/importMeta", "node", "vitest"],
+    "moduleResolution": "bundler",
+    "isolatedModules": true
   },
   "include": [
     "vite.config.ts",

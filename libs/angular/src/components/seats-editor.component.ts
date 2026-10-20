@@ -10,6 +10,7 @@ import {
   Output,
   SimpleChanges,
   ViewChild,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import type {
   Building,
@@ -38,6 +39,7 @@ import {
       style="width: 100%; height: 100%; position: relative; overflow: hidden;"
     ></div>
   `,
+  changeDetection: ChangeDetectionStrategy.Eager,
   styles: [
     `
       :host {

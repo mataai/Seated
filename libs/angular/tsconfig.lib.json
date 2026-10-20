@@ -12,8 +12,15 @@
       "@open-seats/renderer": ["dist/libs/renderer/index.d.ts"],
       "@open-seats/viewer": ["dist/libs/viewer/index.d.ts"],
       "@open-seats/editor": ["dist/libs/editor/index.d.ts"]
-    }
+    },
+    "moduleResolution": "bundler",
+    "module": "preserve",
+    "lib": ["dom", "es2022"],
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["**/*.spec.ts", "tests/**/*.ts"]
+  "exclude": ["**/*.spec.ts", "tests/**/*.ts"],
+  "angularCompilerOptions": {
+    "strictTemplates": false
+  }
 }

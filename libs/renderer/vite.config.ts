@@ -34,7 +34,7 @@ export default defineConfig(() => ({
       fileName: 'index',
       formats: ['es' as const],
     },
-    rollupOptions: {
+    rolldownOptions: {
       external: ['@open-seats/core', 'konva'],
     },
   },
