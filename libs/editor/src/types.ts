@@ -59,6 +59,14 @@ export interface EditorInstance {
   selectNodes(ids: string[]): void;
   clearSelection(): void;
 
+  // Viewport / Zoom & Pan
+  zoomIn(factor?: number): void;
+  zoomOut(factor?: number): void;
+  resetZoom(): void;
+  panTo(x: number, y: number): void;
+  panBy(dx: number, dy: number): void;
+  getScale(): number;
+
   // Programmatic shape creation with strict validation
   createBuilding(points: Vec2[], label?: string, position?: Vec2): Building | null;
   createZone(buildingId: string, points: Vec2[], fill: string, position?: Vec2): Zone | null;

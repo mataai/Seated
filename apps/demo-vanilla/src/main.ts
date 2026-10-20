@@ -45,7 +45,20 @@ function logEvent(name: string, detail: string) {
   const row = document.createElement('div');
   row.className = 'event-row';
   const time = new Date().toLocaleTimeString().split(' ')[0];
-  row.innerHTML = `[${time}] <span class="event-name">${name}</span>: <span class="event-detail">${detail}</span>`;
+
+  const prefix = document.createTextNode(`[${time}] `);
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'event-name';
+  nameSpan.textContent = name;
+  const colon = document.createTextNode(': ');
+  const detailSpan = document.createElement('span');
+  detailSpan.className = 'event-detail';
+  detailSpan.textContent = detail;
+
+  row.appendChild(prefix);
+  row.appendChild(nameSpan);
+  row.appendChild(colon);
+  row.appendChild(detailSpan);
   eventFeed.prepend(row);
 
   if (eventFeed.children.length > 30) {
@@ -235,16 +248,27 @@ btnTogglePreview.addEventListener('click', () => {
 
 // Zoom & Pan
 btnZoomIn.addEventListener('click', () => {
-  if (currentMode === 'viewer') viewerInstance?.zoomIn(1.2);
-  else editorInstance?.getFloorplan();
+  if (currentMode === 'viewer') {
+    viewerInstance?.zoomIn(1.2);
+  } else {
+    editorInstance?.zoomIn(1.2);
+  }
 });
 
 btnZoomOut.addEventListener('click', () => {
-  if (currentMode === 'viewer') viewerInstance?.zoomOut(1.2);
+  if (currentMode === 'viewer') {
+    viewerInstance?.zoomOut(1.2);
+  } else {
+    editorInstance?.zoomOut(1.2);
+  }
 });
 
 btnResetZoom.addEventListener('click', () => {
-  if (currentMode === 'viewer') viewerInstance?.resetZoom();
+  if (currentMode === 'viewer') {
+    viewerInstance?.resetZoom();
+  } else {
+    editorInstance?.resetZoom();
+  }
 });
 
 // Export JSON

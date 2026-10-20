@@ -39,7 +39,7 @@ import {
       style="width: 100%; height: 100%; position: relative; overflow: hidden;"
     ></div>
   `,
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [
     `
       :host {
@@ -279,6 +279,30 @@ export class SeatsEditorComponent
 
   public deleteVertex(polygonNodeId: string, vertexIndex: number): boolean {
     return this.editor?.deleteVertex(polygonNodeId, vertexIndex) ?? false;
+  }
+
+  public zoomIn(factor?: number): void {
+    this.editor?.zoomIn(factor);
+  }
+
+  public zoomOut(factor?: number): void {
+    this.editor?.zoomOut(factor);
+  }
+
+  public resetZoom(): void {
+    this.editor?.resetZoom();
+  }
+
+  public panTo(x: number, y: number): void {
+    this.editor?.panTo(x, y);
+  }
+
+  public panBy(dx: number, dy: number): void {
+    this.editor?.panBy(dx, dy);
+  }
+
+  public getScale(): number {
+    return this.editor?.getScale() ?? 1;
   }
 
   ngOnDestroy(): void {

@@ -75,7 +75,8 @@ export function canPlace(
 
     const candidateIds = spatialIndex.query(proposedBox);
     for (const otherId of candidateIds) {
-      const otherPoly = otherBuildingsMap.get(otherId)!;
+      const otherPoly = otherBuildingsMap.get(otherId);
+      if (!otherPoly) continue;
       if (polygonsOverlap(proposedPoly, otherPoly, tol)) {
         violations.push({
           rule: 'building-overlap',
@@ -156,7 +157,8 @@ export function canPlace(
 
       const candidates = spatialIndex.query(proposedBox);
       for (const candId of candidates) {
-        const item = siblingPolys.get(candId)!;
+        const item = siblingPolys.get(candId);
+        if (!item) continue;
         if (polygonsOverlap(proposedPoly, item.poly, tol)) {
           violations.push({
             rule: item.type === 'zone' ? 'zone-overlap' : 'zone-row-overlap',
@@ -221,7 +223,8 @@ export function canPlace(
 
       const candidates = spatialIndex.query(proposedBox);
       for (const candId of candidates) {
-        const item = siblingPolys.get(candId)!;
+        const item = siblingPolys.get(candId);
+        if (!item) continue;
         if (polygonsOverlap(proposedPoly, item.poly, tol)) {
           violations.push({
             rule: item.type === 'row' ? 'row-overlap' : 'zone-row-overlap',

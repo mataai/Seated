@@ -4,7 +4,7 @@
       <div class="logo-badge">S</div>
       <div class="brand-info">
         <span class="brand-title">OpenSeats</span>
-        <span class="tag">Angular 19</span>
+        <span class="tag">Angular</span>
       </div>
     </div>
 
@@ -33,83 +33,87 @@
 
   <div class="main-content">
     <!-- Editor Toolbar -->
-    <aside *ngIf="mode === 'editor'" class="toolbar">
-      <div>
-        <div class="section-title">Tools</div>
-        <div class="tool-grid">
+    @if (mode === 'editor') {
+      <aside class="toolbar">
+        <div>
+          <div class="section-title">Tools</div>
+          <div class="tool-grid">
+            <button
+              class="tool-btn"
+              [class.active]="currentTool === 'select'"
+              (click)="setTool('select')"
+            >
+              Select
+            </button>
+            <button
+              class="tool-btn"
+              [class.active]="currentTool === 'pan'"
+              (click)="setTool('pan')"
+            >
+              Pan
+            </button>
+            <button
+              class="tool-btn"
+              [class.active]="currentTool === 'row'"
+              (click)="setTool('row')"
+            >
+              Add Row
+            </button>
+            <button
+              class="tool-btn"
+              [class.active]="currentTool === 'add-seat'"
+              (click)="setTool('add-seat')"
+            >
+              Add Seat
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">History</div>
+          <div class="btn-group">
+            <button class="btn" (click)="undo()">Undo</button>
+            <button class="btn" (click)="redo()">Redo</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">Preview</div>
           <button
-            class="tool-btn"
-            [class.active]="currentTool === 'select'"
-            (click)="setTool('select')"
+            class="btn"
+            [class.btn-primary]="!isPreviewActive"
+            (click)="togglePreview()"
+            style="width: 100%;"
           >
-            Select
-          </button>
-          <button
-            class="tool-btn"
-            [class.active]="currentTool === 'pan'"
-            (click)="setTool('pan')"
-          >
-            Pan
-          </button>
-          <button
-            class="tool-btn"
-            [class.active]="currentTool === 'row'"
-            (click)="setTool('row')"
-          >
-            Add Row
-          </button>
-          <button
-            class="tool-btn"
-            [class.active]="currentTool === 'add-seat'"
-            (click)="setTool('add-seat')"
-          >
-            Add Seat
+            {{ isPreviewActive ? 'Exit Preview' : 'Preview Mode' }}
           </button>
         </div>
-      </div>
-
-      <div>
-        <div class="section-title">History</div>
-        <div class="btn-group">
-          <button class="btn" (click)="undo()">Undo</button>
-          <button class="btn" (click)="redo()">Redo</button>
-        </div>
-      </div>
-
-      <div>
-        <div class="section-title">Preview</div>
-        <button
-          class="btn"
-          [class.btn-primary]="!isPreviewActive"
-          (click)="togglePreview()"
-          style="width: 100%;"
-        >
-          {{ isPreviewActive ? 'Exit Preview' : 'Preview Mode' }}
-        </button>
-      </div>
-    </aside>
+      </aside>
+    }
 
     <!-- Canvas Area -->
     <main class="canvas-area">
       <div class="canvas-container">
-        <seats-viewer
-          *ngIf="mode === 'viewer'"
-          [floorplan]="floorplan"
-          [statuses]="statuses"
-          [maxSelectable]="6"
-          (selectionChanged)="onSelectionChanged($event)"
-          (seatSelected)="onSeatSelected($event)"
-          (seatDeselected)="onSeatDeselected($event)"
-          (seatHovered)="onSeatHovered($event)"
-        ></seats-viewer>
+        @if (mode === 'viewer') {
+          <seats-viewer
+            [floorplan]="floorplan"
+            [statuses]="statuses"
+            [maxSelectable]="6"
+            (selectionChanged)="onSelectionChanged($event)"
+            (seatSelected)="onSeatSelected($event)"
+            (seatDeselected)="onSeatDeselected($event)"
+            (seatHovered)="onSeatHovered($event)"
+          ></seats-viewer>
+        }
 
-        <seats-editor
-          *ngIf="mode === 'editor'"
-          [floorplan]="floorplan"
-          [tool]="currentTool"
-          (change)="onFloorplanChanged($event)"
-          (violationsUpdated)="onViolationsUpdated($event)"
-        ></seats-editor>
+        @if (mode === 'editor') {
+          <seats-editor
+            [floorplan]="floorplan"
+            [tool]="currentTool"
+            (change)="onFloorplanChanged($event)"
+            (violationsUpdated)="onViolationsUpdated($event)"
+          ></seats-editor>
+        }
       </div>
 
       <div class="floating-controls">
@@ -122,9 +126,11 @@
     <aside class="side-panel">
       <div class="panel-header">
         <span>Reservation Status</span>
-        <span *ngIf="selectedSeatIds.length > 0" class="tag selected-tag">
-          {{ selectedSeatIds.length }} selected
-        </span>
+        @if (selectedSeatIds.length > 0) {
+          <span class="tag selected-tag">
+            {{ selectedSeatIds.length }} selected
+          </span>
+        }
       </div>
 
       <div class="panel-body">
@@ -160,31 +166,37 @@
           </div>
         </div>
 
-        <div *ngIf="selectedSeatIds.length > 0" class="card action-card">
-          <div class="card-title">SELECTED SEATS</div>
-          <div class="seat-tags">
-            <span *ngFor="let label of selectedSeatLabels" class="seat-badge">
-              {{ label }}
-            </span>
+        @if (selectedSeatIds.length > 0) {
+          <div class="card action-card">
+            <div class="card-title">SELECTED SEATS</div>
+            <div class="seat-tags">
+              @for (label of selectedSeatLabels; track label) {
+                <span class="seat-badge">
+                  {{ label }}
+                </span>
+              }
+            </div>
+            <div class="btn-group" style="margin-top: 12px;">
+              <button class="btn btn-primary" style="flex: 1;" (click)="reserveSelected()">
+                Reserve
+              </button>
+              <button class="btn" style="flex: 1;" (click)="clearSelection()">
+                Clear
+              </button>
+            </div>
           </div>
-          <div class="btn-group" style="margin-top: 12px;">
-            <button class="btn btn-primary" style="flex: 1;" (click)="reserveSelected()">
-              Reserve
-            </button>
-            <button class="btn" style="flex: 1;" (click)="clearSelection()">
-              Clear
-            </button>
-          </div>
-        </div>
+        }
 
         <div class="card">
           <div class="card-title">EVENT STREAM</div>
           <div class="event-feed">
-            <div *ngFor="let event of eventLog" class="event-row">
-              <span class="event-time">[{{ event.time }}]</span>
-              <span class="event-name">{{ event.name }}</span>:
-              <span class="event-detail">{{ event.detail }}</span>
-            </div>
+            @for (event of eventLog; track event.id) {
+              <div class="event-row">
+                <span class="event-time">[{{ event.time }}]</span>
+                <span class="event-name">{{ event.name }}</span>:
+                <span class="event-detail">{{ event.detail }}</span>
+              </div>
+            }
           </div>
         </div>
       </div>

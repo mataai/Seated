@@ -272,5 +272,40 @@ describe('Editor (@open-seats/editor)', () => {
     expect(editor.undo()).toBe(true);
     expect(editor.getFloorplan().buildings[0].rows[0].position.x).toBe(100);
   });
+
+  it('supports zoom and pan controls in edit mode and preview mode', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+
+    const initialScale = editor.getScale();
+    expect(initialScale).toBe(1);
+
+    editor.zoomIn(1.5);
+    expect(editor.getScale()).toBe(1.5);
+
+    editor.zoomOut(1.5);
+    expect(editor.getScale()).toBeCloseTo(1);
+
+    editor.zoomIn(2);
+    expect(editor.getScale()).toBe(2);
+    editor.resetZoom();
+    expect(editor.getScale()).toBe(1);
+
+    // Pan
+    editor.panTo(50, 60);
+    editor.panBy(10, 15);
+
+    // Preview mode zoom & pan
+    editor.togglePreview(true);
+    expect(editor.isPreview()).toBe(true);
+
+    editor.zoomIn(1.4);
+    expect(editor.getScale()).toBe(1.4);
+
+    editor.resetZoom();
+    expect(editor.getScale()).toBe(1);
+
+    editor.togglePreview(false);
+    expect(editor.isPreview()).toBe(false);
+  });
 });
 

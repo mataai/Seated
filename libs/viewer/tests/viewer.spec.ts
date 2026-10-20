@@ -168,6 +168,41 @@ describe('Viewer (@open-seats/viewer)', () => {
     vi.useRealTimers();
   });
 
+  it('sanitizes unsafe HTML and event handlers in tooltipProvider', async () => {
+    vi.useFakeTimers();
+
+    const maliciousHtml = '<span class="safe">Hello</span><script>alert("xss")</script><img src="x" onerror="alert(1)">';
+    const provider = vi.fn().mockImplementation(async () => ({
+      html: maliciousHtml,
+    }));
+
+    viewer = createViewer(container, {
+      floorplan: validPlan,
+      tooltipProvider: provider,
+      tooltipDebounceMs: 0,
+    });
+
+    const seatCtx = {
+      seat: validPlan.buildings[0].rows[0].seats[0],
+      row: validPlan.buildings[0].rows[0],
+      building: validPlan.buildings[0],
+    };
+
+    const tooltipManager = (viewer as any).tooltipManager;
+    tooltipManager.show(seatCtx, new MouseEvent('mousemove', { clientX: 10, clientY: 10 }));
+    await vi.advanceTimersByTimeAsync(10);
+
+    const tooltipEl = tooltipManager.tooltipEl as HTMLElement;
+    expect(tooltipEl.querySelector('script')).toBeNull();
+    const img = tooltipEl.querySelector('img');
+    if (img) {
+      expect(img.getAttribute('onerror')).toBeNull();
+    }
+    expect(tooltipEl.textContent).toContain('Hello');
+
+    vi.useRealTimers();
+  });
+
   it('sets up ARIA accessibility attributes and live region', () => {
     viewer = createViewer(container, {
       floorplan: validPlan,

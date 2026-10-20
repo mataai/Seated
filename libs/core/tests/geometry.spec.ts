@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   add,
   cross,
-  degToRad,
   dist,
   dot,
   inverseTransformPoint,
-  isPointOnSegment,
   isSelfIntersecting,
   isValidPolygon,
   normalizeWinding,

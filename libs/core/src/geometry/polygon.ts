@@ -4,9 +4,6 @@ import {
   sub,
   distanceToSegment,
   approxEqual,
-  vec2,
-  add,
-  mul,
 } from './vec2';
 
 /**

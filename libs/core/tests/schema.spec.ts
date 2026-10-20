@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FloorplanSchema,
   parseFloorplan,
   safeParseFloorplan,
   type Floorplan,
@@ -119,8 +118,8 @@ describe('Schema validation', () => {
     const parsed = safeParseFloorplan(forwardCompatiblePlan);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect((parsed.data as any).futureField).toBe('awesome-future-feature');
-      expect((parsed.data.buildings[0] as any).extraBuildingData).toEqual({
+      expect((parsed.data as Record<string, unknown>).futureField).toBe('awesome-future-feature');
+      expect((parsed.data.buildings[0] as Record<string, unknown>).extraBuildingData).toEqual({
         vip: true,
       });
     }

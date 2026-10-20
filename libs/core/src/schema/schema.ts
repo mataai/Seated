@@ -1,11 +1,5 @@
 import { z } from 'zod';
-import type {
-  Floorplan as IFloorplan,
-  Building as IBuilding,
-  Zone as IZone,
-  Row as IRow,
-  Seat as ISeat,
-} from './types';
+import type { Floorplan as IFloorplan } from './types';
 
 export const Vec2Schema = z
   .object({

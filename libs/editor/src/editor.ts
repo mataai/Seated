@@ -285,6 +285,54 @@ export class Editor implements EditorInstance {
     this.emitter.emit('selectionChange', []);
   }
 
+  // Viewport / Zoom & Pan
+  public zoomIn(factor = 1.2): void {
+    if (this.isPreviewMode && this.embeddedViewer) {
+      this.embeddedViewer.zoomIn(factor);
+    } else {
+      this.renderer?.zoomIn(factor);
+    }
+  }
+
+  public zoomOut(factor = 1.2): void {
+    if (this.isPreviewMode && this.embeddedViewer) {
+      this.embeddedViewer.zoomOut(factor);
+    } else {
+      this.renderer?.zoomOut(factor);
+    }
+  }
+
+  public resetZoom(): void {
+    if (this.isPreviewMode && this.embeddedViewer) {
+      this.embeddedViewer.resetZoom();
+    } else {
+      this.renderer?.resetZoom();
+    }
+  }
+
+  public panTo(x: number, y: number): void {
+    if (this.isPreviewMode && this.embeddedViewer) {
+      this.embeddedViewer.panTo(x, y);
+    } else {
+      this.renderer?.panTo(x, y);
+    }
+  }
+
+  public panBy(dx: number, dy: number): void {
+    if (this.isPreviewMode && this.embeddedViewer) {
+      this.embeddedViewer.panBy(dx, dy);
+    } else {
+      this.renderer?.panBy(dx, dy);
+    }
+  }
+
+  public getScale(): number {
+    if (this.isPreviewMode && this.embeddedViewer) {
+      return this.embeddedViewer.getScale();
+    }
+    return this.renderer?.getScale() ?? 1;
+  }
+
   // ----------------------------------------------------
   // Shape Creation & Modifications with Strict Validation
   // ----------------------------------------------------

@@ -1,4 +1,10 @@
-import { Component, ViewChild, ChangeDetectionStrategy } from '@angular/core';
+import {
+  Component,
+  ViewChild,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  inject,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   SeatsEditorComponent,
@@ -17,10 +23,12 @@ import type { RenderSeatContext } from '@open-seats/viewer';
   selector: 'open-seats-root',
   imports: [CommonModule, SeatsViewerComponent, SeatsEditorComponent],
   templateUrl: './app.component.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrls: ['./app.component.scss'],
 })
 export class AppComponent {
+  private cdr = inject(ChangeDetectorRef);
+
   @ViewChild(SeatsViewerComponent) viewerComp?: SeatsViewerComponent;
   @ViewChild(SeatsEditorComponent) editorComp?: SeatsEditorComponent;
 
@@ -37,9 +45,10 @@ export class AppComponent {
     's-c-8a': 'reserved',
   };
 
+  private logIdCounter = 0;
   public selectedSeatIds: string[] = [];
   public selectedSeatLabels: string[] = [];
-  public eventLog: { time: string; name: string; detail: string }[] = [];
+  public eventLog: { id: number; time: string; name: string; detail: string }[] = [];
   public isPreviewActive = false;
 
   public setMode(newMode: 'viewer' | 'editor'): void {
@@ -52,6 +61,7 @@ export class AppComponent {
 
     this.mode = newMode;
     this.addLog('mode', `Switched to ${newMode} mode`);
+    this.cdr.markForCheck();
   }
 
   public setTool(tool: ToolType): void {
@@ -77,33 +87,49 @@ export class AppComponent {
         if (seat) this.addLog('create', `Added seat to Row ${lastRow.label}`);
       }
     }
+    this.cdr.markForCheck();
   }
 
   public undo(): void {
     this.editorComp?.undo();
+    this.cdr.markForCheck();
   }
 
   public redo(): void {
     this.editorComp?.redo();
+    this.cdr.markForCheck();
   }
 
   public togglePreview(): void {
     if (this.editorComp) {
       this.isPreviewActive = this.editorComp.togglePreview();
       this.addLog('preview', this.isPreviewActive ? 'ON' : 'OFF');
+      this.cdr.markForCheck();
     }
   }
 
   public zoomIn(): void {
-    if (this.mode === 'viewer') this.viewerComp?.zoomIn(1.2);
+    if (this.mode === 'viewer') {
+      this.viewerComp?.zoomIn(1.2);
+    } else {
+      this.editorComp?.zoomIn(1.2);
+    }
   }
 
   public zoomOut(): void {
-    if (this.mode === 'viewer') this.viewerComp?.zoomOut(1.2);
+    if (this.mode === 'viewer') {
+      this.viewerComp?.zoomOut(1.2);
+    } else {
+      this.editorComp?.zoomOut(1.2);
+    }
   }
 
   public resetZoom(): void {
-    if (this.mode === 'viewer') this.viewerComp?.resetZoom();
+    if (this.mode === 'viewer') {
+      this.viewerComp?.resetZoom();
+    } else {
+      this.editorComp?.resetZoom();
+    }
   }
 
   public onSelectionChanged(payload: {
@@ -113,23 +139,28 @@ export class AppComponent {
     this.selectedSeatIds = payload.selectedSeatIds;
     this.selectedSeatLabels = payload.selectedSeats.map((s) => s.seat.label);
     this.addLog('selection', `${this.selectedSeatIds.length} seat(s) selected`);
+    this.cdr.markForCheck();
   }
 
   public onSeatSelected(ctx: RenderSeatContext): void {
     this.addLog('seatSelected', ctx.seat.label);
+    this.cdr.markForCheck();
   }
 
   public onSeatDeselected(ctx: RenderSeatContext): void {
     this.addLog('seatDeselected', ctx.seat.label);
+    this.cdr.markForCheck();
   }
 
   public onSeatHovered(ctx: RenderSeatContext): void {
     this.addLog('hover', `${ctx.seat.label} (${ctx.row.label})`);
+    this.cdr.markForCheck();
   }
 
   public onFloorplanChanged(plan: Floorplan): void {
     this.floorplan = plan;
     this.addLog('change', 'Floorplan modified via editor');
+    this.cdr.markForCheck();
   }
 
   public onViolationsUpdated(violations: Violation[]): void {
@@ -138,6 +169,7 @@ export class AppComponent {
         .map((v) => `${v.rule} (${v.ids.join(', ')})`)
         .join('; ');
       this.addLog('violation', summary);
+      this.cdr.markForCheck();
     }
   }
 
@@ -150,11 +182,13 @@ export class AppComponent {
       this.statuses = updateMap;
       this.viewerComp.clearSelection();
       this.addLog('reserved', `Reserved ${this.selectedSeatIds.length} seat(s)`);
+      this.cdr.markForCheck();
     }
   }
 
   public clearSelection(): void {
     this.viewerComp?.clearSelection();
+    this.cdr.markForCheck();
   }
 
   public exportJson(): void {
@@ -162,23 +196,26 @@ export class AppComponent {
       this.mode === 'viewer'
         ? this.floorplan
         : this.editorComp?.getFloorplan() || this.floorplan;
-    const dataStr =
-      'data:text/json;charset=utf-8,' +
-      encodeURIComponent(JSON.stringify(plan, null, 2));
+    const jsonStr = JSON.stringify(plan, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const blobUrl = URL.createObjectURL(blob);
     const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', 'floorplan.json');
+    downloadAnchor.href = blobUrl;
+    downloadAnchor.download = 'floorplan.json';
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
+    URL.revokeObjectURL(blobUrl);
     this.addLog('export', 'Floorplan exported as JSON');
   }
 
   private addLog(name: string, detail: string): void {
     const time = new Date().toLocaleTimeString().split(' ')[0];
-    this.eventLog.unshift({ time, name, detail });
+    const id = ++this.logIdCounter;
+    this.eventLog.unshift({ id, time, name, detail });
     if (this.eventLog.length > 25) {
       this.eventLog.pop();
     }
+    this.cdr.markForCheck();
   }
 }

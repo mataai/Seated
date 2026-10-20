@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  DEFAULT_STATUSES,
   FALLBACK_STATUS_STYLE,
   StatusRegistry,
 } from '../src';
@@ -31,7 +30,9 @@ describe('StatusRegistry', () => {
 
   it('handles unknown status key by returning fallback and never throwing', () => {
     const registry = new StatusRegistry();
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {
+      // Intentionally suppressed for test
+    });
 
     expect(() => {
       const def = registry.get('completely_unknown_key');

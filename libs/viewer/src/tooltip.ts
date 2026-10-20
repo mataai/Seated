@@ -103,22 +103,59 @@ export class TooltipManager {
     if (!this.tooltipEl) return;
 
     if (info.html) {
-      this.tooltipEl.innerHTML = info.html;
+      this.tooltipEl.textContent = '';
+      this.tooltipEl.appendChild(this.sanitizeHtml(info.html));
       return;
     }
 
-    let markup = '';
+    this.tooltipEl.textContent = '';
+
     if (info.title) {
-      markup += `<div style="font-weight: 600; margin-bottom: 2px;">${info.title}</div>`;
+      const titleEl = document.createElement('div');
+      titleEl.style.fontWeight = '600';
+      titleEl.style.marginBottom = '2px';
+      titleEl.textContent = info.title;
+      this.tooltipEl.appendChild(titleEl);
     }
     if (info.subtitle) {
-      markup += `<div style="color: #a1a1aa; font-size: 11px;">${info.subtitle}</div>`;
+      const subEl = document.createElement('div');
+      subEl.style.color = '#a1a1aa';
+      subEl.style.fontSize = '11px';
+      subEl.textContent = info.subtitle;
+      this.tooltipEl.appendChild(subEl);
     }
     if (info.content) {
-      markup += `<div style="margin-top: 4px;">${info.content}</div>`;
+      const contentEl = document.createElement('div');
+      contentEl.style.marginTop = '4px';
+      contentEl.textContent = info.content;
+      this.tooltipEl.appendChild(contentEl);
     }
+  }
 
-    this.tooltipEl.innerHTML = markup;
+  private sanitizeHtml(rawHtml: string): DocumentFragment {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(rawHtml, 'text/html');
+    const disallowedTags = ['SCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'FORM', 'STYLE'];
+    disallowedTags.forEach((tag) => {
+      doc.body.querySelectorAll(tag).forEach((el) => el.remove());
+    });
+    const allEls = doc.body.querySelectorAll('*');
+    allEls.forEach((el) => {
+      for (const attr of Array.from(el.attributes)) {
+        if (
+          attr.name.toLowerCase().startsWith('on') ||
+          attr.value.trim().toLowerCase().startsWith('javascript:')
+        ) {
+          el.removeAttribute(attr.name);
+        }
+      }
+    });
+
+    const fragment = document.createDocumentFragment();
+    while (doc.body.firstChild) {
+      fragment.appendChild(doc.body.firstChild);
+    }
+    return fragment;
   }
 
   private visible(show: boolean): void {

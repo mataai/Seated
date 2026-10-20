@@ -30,7 +30,7 @@ import {
       style="width: 100%; height: 100%; position: relative; overflow: hidden;"
     ></div>
   `,
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [
     `
       :host {

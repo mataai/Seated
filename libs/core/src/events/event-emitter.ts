@@ -1,8 +1,11 @@
 export type Listener<T> = (payload: T) => void;
 export type Unsubscribe = () => void;
 
-export class TypedEventEmitter<EventMap extends Record<string, any>> {
-  private listeners = new Map<keyof EventMap, Set<Listener<any>>>();
+export class TypedEventEmitter<EventMap extends object> {
+  private listeners = new Map<
+    keyof EventMap,
+    Set<Listener<EventMap[keyof EventMap]>>
+  >();
 
   public on<K extends keyof EventMap>(
     event: K,
@@ -13,7 +16,7 @@ export class TypedEventEmitter<EventMap extends Record<string, any>> {
       set = new Set();
       this.listeners.set(event, set);
     }
-    set.add(listener);
+    set.add(listener as Listener<EventMap[keyof EventMap]>);
 
     return () => {
       this.off(event, listener);
@@ -38,7 +41,7 @@ export class TypedEventEmitter<EventMap extends Record<string, any>> {
   ): void {
     const set = this.listeners.get(event);
     if (set) {
-      set.delete(listener);
+      set.delete(listener as Listener<EventMap[keyof EventMap]>);
       if (set.size === 0) {
         this.listeners.delete(event);
       }
@@ -52,7 +55,7 @@ export class TypedEventEmitter<EventMap extends Record<string, any>> {
     // Iterate over a shallow copy so listeners modifying the set during emit won't cause issues
     const copy = Array.from(set);
     for (const listener of copy) {
-      listener(payload);
+      (listener as Listener<EventMap[K]>)(payload);
     }
   }
 

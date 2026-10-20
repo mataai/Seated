@@ -1,4 +1,4 @@
-import type { Building, Floorplan, Row, Zone } from '../schema/types';
+import type { Floorplan } from '../schema/types';
 import {
   buildingFootprint,
   rowFootprint,
@@ -48,11 +48,13 @@ export function validateLayout(
   // Cross-building checks: buildings must not overlap
   for (let i = 0; i < buildings.length; i++) {
     const b1 = buildings[i];
-    const poly1 = bFootprints.get(b1.id)!;
+    const poly1 = bFootprints.get(b1.id);
+    if (!poly1) continue;
 
     for (let j = i + 1; j < buildings.length; j++) {
       const b2 = buildings[j];
-      const poly2 = bFootprints.get(b2.id)!;
+      const poly2 = bFootprints.get(b2.id);
+      if (!poly2) continue;
 
       if (polygonsOverlap(poly1, poly2, tol)) {
         violations.push({
@@ -95,7 +97,8 @@ export function validateLayout(
 
     // Containment within building
     for (const z of zones) {
-      const zPoly = zFootprints.get(z.id)!;
+      const zPoly = zFootprints.get(z.id);
+      if (!zPoly) continue;
       if (!polygonContains(b.points, zPoly, tol)) {
         violations.push({
           rule: 'out-of-bounds',
@@ -105,7 +108,8 @@ export function validateLayout(
     }
 
     for (const r of rows) {
-      const rPoly = rFootprints.get(r.id)!;
+      const rPoly = rFootprints.get(r.id);
+      if (!rPoly) continue;
       if (!polygonContains(b.points, rPoly, tol)) {
         violations.push({
           rule: 'out-of-bounds',
@@ -117,11 +121,13 @@ export function validateLayout(
     // Zone vs Zone overlap
     for (let i = 0; i < zones.length; i++) {
       const z1 = zones[i];
-      const p1 = zFootprints.get(z1.id)!;
+      const p1 = zFootprints.get(z1.id);
+      if (!p1) continue;
 
       for (let j = i + 1; j < zones.length; j++) {
         const z2 = zones[j];
-        const p2 = zFootprints.get(z2.id)!;
+        const p2 = zFootprints.get(z2.id);
+        if (!p2) continue;
 
         if (polygonsOverlap(p1, p2, tol)) {
           violations.push({
@@ -135,11 +141,13 @@ export function validateLayout(
     // Row vs Row overlap
     for (let i = 0; i < rows.length; i++) {
       const r1 = rows[i];
-      const p1 = rFootprints.get(r1.id)!;
+      const p1 = rFootprints.get(r1.id);
+      if (!p1) continue;
 
       for (let j = i + 1; j < rows.length; j++) {
         const r2 = rows[j];
-        const p2 = rFootprints.get(r2.id)!;
+        const p2 = rFootprints.get(r2.id);
+        if (!p2) continue;
 
         if (polygonsOverlap(p1, p2, tol)) {
           violations.push({
@@ -152,10 +160,12 @@ export function validateLayout(
 
     // Zone vs Row overlap
     for (const z of zones) {
-      const zPoly = zFootprints.get(z.id)!;
+      const zPoly = zFootprints.get(z.id);
+      if (!zPoly) continue;
 
       for (const r of rows) {
-        const rPoly = rFootprints.get(r.id)!;
+        const rPoly = rFootprints.get(r.id);
+        if (!rPoly) continue;
 
         if (polygonsOverlap(zPoly, rPoly, tol)) {
           violations.push({
