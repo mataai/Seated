@@ -15,7 +15,6 @@ import {
   type Floorplan,
   type Violation,
 } from '@open-seats/core';
-import type { ToolType } from '@open-seats/editor';
 import type { RenderSeatContext } from '@open-seats/viewer';
 
 @Component({
@@ -34,7 +33,13 @@ export class AppComponent {
 
   public floorplan: Floorplan = JSON.parse(JSON.stringify(SAMPLE_FLOORPLAN));
   public mode: 'viewer' | 'editor' = 'viewer';
-  public currentTool: ToolType = 'select';
+  public currentTool: import('@open-seats/editor').ToolType = 'select';
+
+  public setTool(tool: import('@open-seats/editor').ToolType): void {
+    this.currentTool = tool;
+    this.editorComp?.setTool(tool);
+    this.cdr.markForCheck();
+  }
 
   public statuses: Record<string, string> = {
     's-a-1a': 'reserved',
@@ -49,7 +54,6 @@ export class AppComponent {
   public selectedSeatIds: string[] = [];
   public selectedSeatLabels: string[] = [];
   public eventLog: { id: number; time: string; name: string; detail: string }[] = [];
-  public isPreviewActive = false;
 
   public setMode(newMode: 'viewer' | 'editor'): void {
     if (this.mode === newMode) return;
@@ -62,50 +66,6 @@ export class AppComponent {
     this.mode = newMode;
     this.addLog('mode', `Switched to ${newMode} mode`);
     this.cdr.markForCheck();
-  }
-
-  public setTool(tool: ToolType): void {
-    this.currentTool = tool;
-    this.editorComp?.setTool(tool);
-
-    if (tool === 'row') {
-      const bld = this.editorComp?.getFloorplan()?.buildings[0];
-      if (bld) {
-        const row = this.editorComp?.createRow(bld.id, { x: 160, y: 580 }, 8, {
-          side: 'both',
-          seatSpacing: 42,
-          seatRadius: 13,
-          tableWidth: 26,
-        });
-        if (row) this.addLog('create', `Added Row ${row.label}`);
-      }
-    } else if (tool === 'add-seat') {
-      const bld = this.editorComp?.getFloorplan()?.buildings[0];
-      if (bld && bld.rows.length > 0) {
-        const lastRow = bld.rows[bld.rows.length - 1];
-        const seat = this.editorComp?.addSeatToRow(bld.id, lastRow.id, 'a');
-        if (seat) this.addLog('create', `Added seat to Row ${lastRow.label}`);
-      }
-    }
-    this.cdr.markForCheck();
-  }
-
-  public undo(): void {
-    this.editorComp?.undo();
-    this.cdr.markForCheck();
-  }
-
-  public redo(): void {
-    this.editorComp?.redo();
-    this.cdr.markForCheck();
-  }
-
-  public togglePreview(): void {
-    if (this.editorComp) {
-      this.isPreviewActive = this.editorComp.togglePreview();
-      this.addLog('preview', this.isPreviewActive ? 'ON' : 'OFF');
-      this.cdr.markForCheck();
-    }
   }
 
   public zoomIn(): void {
@@ -132,6 +92,30 @@ export class AppComponent {
     }
   }
 
+  public onFloorplanChanged(plan: Floorplan): void {
+    this.floorplan = plan;
+    this.addLog('editor', 'Floorplan modified');
+    this.cdr.markForCheck();
+  }
+
+  public onEditorSelectionChanged(ids: string[]): void {
+    if (ids.length > 0) {
+      this.addLog('selection', `Selected node: ${ids[0]}`);
+    }
+  }
+
+  public onViolationsUpdated(violations: Violation[]): void {
+    if (violations.length > 0) {
+      const summary = violations
+        .map((v) => `${v.rule} (${v.ids.join(', ')})`)
+        .join('; ');
+      this.addLog('violation', summary);
+    }
+  }
+
+  // -----------------------------------------------------------
+  // Viewer events & Export
+  // -----------------------------------------------------------
   public onSelectionChanged(payload: {
     selectedSeatIds: string[];
     selectedSeats: RenderSeatContext[];
@@ -155,22 +139,6 @@ export class AppComponent {
   public onSeatHovered(ctx: RenderSeatContext): void {
     this.addLog('hover', `${ctx.seat.label} (${ctx.row.label})`);
     this.cdr.markForCheck();
-  }
-
-  public onFloorplanChanged(plan: Floorplan): void {
-    this.floorplan = plan;
-    this.addLog('change', 'Floorplan modified via editor');
-    this.cdr.markForCheck();
-  }
-
-  public onViolationsUpdated(violations: Violation[]): void {
-    if (violations.length > 0) {
-      const summary = violations
-        .map((v) => `${v.rule} (${v.ids.join(', ')})`)
-        .join('; ');
-      this.addLog('violation', summary);
-      this.cdr.markForCheck();
-    }
   }
 
   public reserveSelected(): void {
@@ -209,7 +177,7 @@ export class AppComponent {
     this.addLog('export', 'Floorplan exported as JSON');
   }
 
-  private addLog(name: string, detail: string): void {
+  public addLog(name: string, detail: string): void {
     const time = new Date().toLocaleTimeString().split(' ')[0];
     const id = ++this.logIdCounter;
     this.eventLog.unshift({ id, time, name, detail });

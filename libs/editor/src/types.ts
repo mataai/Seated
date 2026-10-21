@@ -41,6 +41,7 @@ export interface EditorEvents {
   violationsUpdated: Violation[];
 }
 
+
 export interface EditorInstance {
   loadFloorplan(floorplan: Floorplan): void;
   getFloorplan(): Floorplan;
@@ -69,7 +70,20 @@ export interface EditorInstance {
 
   // Programmatic shape creation with strict validation
   createBuilding(points: Vec2[], label?: string, position?: Vec2): Building | null;
+  createRectangleBuilding(
+    position: Vec2,
+    width: number,
+    height: number,
+    label?: string
+  ): Building | null;
   createZone(buildingId: string, points: Vec2[], fill: string, position?: Vec2): Zone | null;
+  createRectangleZone(
+    buildingId: string,
+    position: Vec2,
+    width: number,
+    height: number,
+    fill?: string
+  ): Zone | null;
   createRow(
     buildingId: string,
     position: Vec2,
@@ -91,9 +105,21 @@ export interface EditorInstance {
     targetSide?: 'a' | 'b'
   ): boolean;
 
+
+  // Context Actions (Clipboard & Flip)
+  copySelection(): boolean;
+  cutSelection(): boolean;
+  paste(targetBuildingId?: string, offset?: Vec2): boolean;
+  canPaste(): boolean;
+  flipNode(nodeId: string, direction: 'horizontal' | 'vertical'): boolean;
+  duplicateNode(nodeId: string): boolean;
+
   // Node editing & transformations
   moveNode(nodeId: string, newPosition: Vec2): boolean;
+  nudgeNode(nodeId: string, dx: number, dy: number): boolean;
+  getNodePosition(nodeId: string): Vec2 | null;
   rotateNode(nodeId: string, newRotation: number): boolean;
+  updateNodeLabel(nodeId: string, label: string): boolean;
   reparentRow(
     rowId: string,
     targetBuildingId: string,
@@ -105,6 +131,13 @@ export interface EditorInstance {
   setRowSide(rowId: string, side: 'one' | 'both'): boolean;
   setRowTableWidth(rowId: string, tableWidth: number): boolean;
   setRowSeatSpacing(rowId: string, seatSpacing: number): boolean;
+  setRowSeatRadius(rowId: string, seatRadius: number): boolean;
+  setRowSeatCount(rowId: string, seatCount: number): boolean;
+
+  // Polygon / Shape Sizing & Properties
+  setZoneFill(zoneId: string, fill: string): boolean;
+  scaleShape(nodeId: string, scaleX: number, scaleY: number): boolean;
+  setShapeDimensions(nodeId: string, width: number, height: number): boolean;
 
   // Polygon vertex editing for buildings and zones
   moveVertex(polygonNodeId: string, vertexIndex: number, newPosition: Vec2): boolean;
@@ -121,3 +154,4 @@ export interface EditorInstance {
   ): void;
   destroy(): void;
 }
+

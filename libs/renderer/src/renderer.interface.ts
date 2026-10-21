@@ -54,6 +54,8 @@ export interface Renderer {
   deselectSeats(seatIds: string[]): void;
   clearSelection(): void;
   getSelectedSeatIds(): string[];
+  setSelectedNodeIds?(ids: string[]): void;
+  getSelectedNodeIds?(): string[];
   setHoveredSeat(seatId: string | null): void;
   setDraggableNodes(enabled: boolean): void;
   zoomIn(factor?: number): void;

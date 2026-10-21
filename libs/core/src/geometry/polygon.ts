@@ -356,3 +356,67 @@ export function getInteriorPoints(polygon: Vec2[]): Vec2[] {
     y: (a.y + b.y + c.y) / 3,
   }));
 }
+
+export interface PolygonBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  width: number;
+  height: number;
+}
+
+export function polygonBoundingBox(points: Vec2[]): PolygonBounds {
+  if (points.length === 0) {
+    return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0 };
+  }
+  let minX = points[0].x;
+  let maxX = points[0].x;
+  let minY = points[0].y;
+  let maxY = points[0].y;
+  for (let i = 1; i < points.length; i++) {
+    const pt = points[i];
+    if (pt.x < minX) minX = pt.x;
+    if (pt.x > maxX) maxX = pt.x;
+    if (pt.y < minY) minY = pt.y;
+    if (pt.y > maxY) maxY = pt.y;
+  }
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
+export function scalePolygon(
+  points: Vec2[],
+  scaleX: number,
+  scaleY: number,
+  origin?: Vec2
+): Vec2[] {
+  const center = origin ?? polygonCentroid(points);
+  return points.map((p) => ({
+    x: center.x + (p.x - center.x) * scaleX,
+    y: center.y + (p.y - center.y) * scaleY,
+  }));
+}
+
+export function flipPolygon(
+  points: Vec2[],
+  axis: 'horizontal' | 'vertical',
+  origin?: Vec2
+): Vec2[] {
+  const center = origin ?? polygonCentroid(points);
+  const mirrored = points.map((p) => {
+    if (axis === 'horizontal') {
+      return { x: 2 * center.x - p.x, y: p.y };
+    } else {
+      return { x: p.x, y: 2 * center.y - p.y };
+    }
+  });
+  return normalizeWinding(mirrored, 'ccw');
+}
+

@@ -42,7 +42,13 @@ export class KonvaRenderer implements Renderer {
 
   private seatCircles = new Map<string, Konva.Circle>();
   private seatContexts = new Map<string, RenderSeatContext>();
+  private buildingGroups = new Map<string, Konva.Group>();
+  private zoneGroups = new Map<string, Konva.Group>();
   private rowGroups = new Map<string, Konva.Group>();
+  private rowRects = new Map<string, Konva.Rect>();
+  private buildingLines = new Map<string, Konva.Line>();
+  private zoneLines = new Map<string, Konva.Line>();
+  private selectedNodeIds = new Set<string>();
   private draggableNodes = false;
 
   private options: RendererOptions;
@@ -192,7 +198,12 @@ export class KonvaRenderer implements Renderer {
     this.floorplan = floorplan;
     this.seatCircles.clear();
     this.seatContexts.clear();
+    this.buildingGroups.clear();
+    this.zoneGroups.clear();
     this.rowGroups.clear();
+    this.rowRects.clear();
+    this.buildingLines.clear();
+    this.zoneLines.clear();
 
     this.backgroundLayer.destroyChildren();
     this.sceneLayer.destroyChildren();
@@ -234,11 +245,36 @@ export class KonvaRenderer implements Renderer {
 
   private renderScene(floorplan: Floorplan): void {
     for (const building of floorplan.buildings) {
+      const isBuildingSelected = this.selectedNodeIds.has(building.id);
       const bGroup = new Konva.Group({
         id: `building-${building.id}`,
         x: building.position.x,
         y: building.position.y,
         rotation: building.rotation,
+        draggable: this.draggableNodes && isBuildingSelected,
+      });
+      this.buildingGroups.set(building.id, bGroup);
+
+      bGroup.on('dragstart', (e) => {
+        e.cancelBubble = true;
+        this.stage.draggable(false);
+        this.options.onNodeDragStart?.(building.id, 'building');
+      });
+
+      bGroup.on('dragmove', (e) => {
+        e.cancelBubble = true;
+        this.options.onNodeDragMove?.(building.id, 'building', bGroup.position());
+      });
+
+      bGroup.on('dragend', (e) => {
+        e.cancelBubble = true;
+        this.stage.draggable(true);
+        this.options.onNodeDragEnd?.(
+          building.id,
+          'building',
+          bGroup.position(),
+          e.evt as MouseEvent
+        );
       });
 
       // Building boundary polygon
@@ -250,11 +286,40 @@ export class KonvaRenderer implements Renderer {
       const bLine = new Konva.Line({
         points: bPointsFlattened,
         closed: true,
-        stroke: '#4a4a4a',
-        strokeWidth: 2,
-        fill: 'rgba(30, 30, 30, 0.4)',
-        listening: false,
+        stroke: isBuildingSelected ? '#3b82f6' : '#4a4a4a',
+        strokeWidth: isBuildingSelected ? 3 : 2,
+        fill: isBuildingSelected
+          ? 'rgba(59, 130, 246, 0.15)'
+          : 'rgba(30, 30, 30, 0.4)',
+        listening: true,
       });
+
+      bLine.on('mouseenter', () => {
+        if (this.draggableNodes) {
+          this.stage.container().style.cursor = this.selectedNodeIds.has(building.id)
+            ? 'move'
+            : 'pointer';
+        }
+      });
+
+      bLine.on('mouseleave', () => {
+        this.stage.container().style.cursor = 'default';
+      });
+
+      bLine.on('pointerdown', (e) => {
+        if (this.draggableNodes) {
+          if (!this.selectedNodeIds.has(building.id)) {
+            this.options.onNodeClick?.(building.id, 'building', e.evt as MouseEvent);
+            bGroup.draggable(true);
+          }
+        }
+      });
+
+      bLine.on('click tap', (e) => {
+        this.options.onNodeClick?.(building.id, 'building', e.evt as MouseEvent);
+      });
+
+      this.buildingLines.set(building.id, bLine);
       bGroup.add(bLine);
 
       // Render Zones (under rows)
@@ -272,11 +337,36 @@ export class KonvaRenderer implements Renderer {
   }
 
   private renderZone(parentGroup: Konva.Group, zone: Zone): void {
+    const isZoneSelected = this.selectedNodeIds.has(zone.id);
     const zGroup = new Konva.Group({
       id: `zone-${zone.id}`,
       x: zone.position.x,
       y: zone.position.y,
       rotation: zone.rotation,
+      draggable: this.draggableNodes && isZoneSelected,
+    });
+    this.zoneGroups.set(zone.id, zGroup);
+
+    zGroup.on('dragstart', (e) => {
+      e.cancelBubble = true;
+      this.stage.draggable(false);
+      this.options.onNodeDragStart?.(zone.id, 'zone');
+    });
+
+    zGroup.on('dragmove', (e) => {
+      e.cancelBubble = true;
+      this.options.onNodeDragMove?.(zone.id, 'zone', zGroup.position());
+    });
+
+    zGroup.on('dragend', (e) => {
+      e.cancelBubble = true;
+      this.stage.draggable(true);
+      this.options.onNodeDragEnd?.(
+        zone.id,
+        'zone',
+        zGroup.position(),
+        e.evt as MouseEvent
+      );
     });
 
     const flattened: number[] = [];
@@ -288,11 +378,39 @@ export class KonvaRenderer implements Renderer {
       points: flattened,
       closed: true,
       fill: zone.fill,
-      stroke: zone.stroke ?? 'transparent',
-      strokeWidth: zone.stroke ? 1 : 0,
+      stroke: isZoneSelected ? '#3b82f6' : (zone.stroke ?? 'transparent'),
+      strokeWidth: isZoneSelected ? 3 : (zone.stroke ? 1 : 0),
       opacity: zone.opacity ?? 1,
-      listening: false,
+      listening: true,
     });
+
+    zLine.on('mouseenter', () => {
+      if (this.draggableNodes) {
+        this.stage.container().style.cursor = this.selectedNodeIds.has(zone.id)
+          ? 'move'
+          : 'pointer';
+      }
+    });
+
+    zLine.on('mouseleave', () => {
+      this.stage.container().style.cursor = 'default';
+    });
+
+    zLine.on('pointerdown', (e) => {
+      if (this.draggableNodes) {
+        e.cancelBubble = true;
+        if (!this.selectedNodeIds.has(zone.id)) {
+          this.options.onNodeClick?.(zone.id, 'zone', e.evt as MouseEvent);
+          zGroup.draggable(true);
+        }
+      }
+    });
+
+    zLine.on('click tap', (e) => {
+      this.options.onNodeClick?.(zone.id, 'zone', e.evt as MouseEvent);
+    });
+
+    this.zoneLines.set(zone.id, zLine);
     zGroup.add(zLine);
 
     if (zone.text?.value) {
@@ -324,30 +442,46 @@ export class KonvaRenderer implements Renderer {
     row: Row,
     building: Building
   ): void {
+    const isRowSelected = this.selectedNodeIds.has(row.id);
     const rGroup = new Konva.Group({
       id: `row-${row.id}`,
       x: row.position.x,
       y: row.position.y,
       rotation: row.rotation,
-      draggable: this.draggableNodes,
+      draggable: this.draggableNodes && isRowSelected,
     });
     this.rowGroups.set(row.id, rGroup);
 
-    rGroup.on('dragstart', () => {
+    rGroup.on('dragstart', (e) => {
+      e.cancelBubble = true;
+      this.stage.draggable(false);
       this.options.onNodeDragStart?.(row.id, 'row');
     });
 
-    rGroup.on('dragmove', () => {
+    rGroup.on('dragmove', (e) => {
+      e.cancelBubble = true;
       this.options.onNodeDragMove?.(row.id, 'row', rGroup.position());
     });
 
     rGroup.on('dragend', (e) => {
+      e.cancelBubble = true;
+      this.stage.draggable(true);
       this.options.onNodeDragEnd?.(
         row.id,
         'row',
         rGroup.position(),
         e.evt as MouseEvent
       );
+    });
+
+    rGroup.on('pointerdown', (e) => {
+      if (this.draggableNodes) {
+        e.cancelBubble = true;
+        if (!this.selectedNodeIds.has(row.id)) {
+          this.options.onNodeClick?.(row.id, 'row', e.evt as MouseEvent);
+          rGroup.draggable(true);
+        }
+      }
     });
 
     rGroup.on('click tap', (e) => {
@@ -363,35 +497,43 @@ export class KonvaRenderer implements Renderer {
       }
     }
 
-    // Table body: if tableWidth > 0, draw table body
-    if (row.tableWidth > 0) {
-      const bodyWidth = maxIndex * row.seatSpacing + 2 * row.seatRadius;
-      const bodyHeight = row.tableWidth;
+    // Row Table Body / Bounding Rect
+    const hasTable = row.tableWidth > 0;
+    const bodyWidth = maxIndex * row.seatSpacing + 2 * row.seatRadius;
+    const bodyHeight = hasTable ? row.tableWidth : row.seatRadius * 2 + 10;
+    const yOffset = hasTable ? -row.tableWidth / 2 : -bodyHeight / 2;
 
-      const tableRect = new Konva.Rect({
-        x: -row.seatRadius,
-        y: -row.tableWidth / 2,
-        width: bodyWidth,
-        height: bodyHeight,
-        fill: row.tableStyle?.fill ?? '#2c2c2c',
-        stroke: row.tableStyle?.stroke ?? '#444444',
-        strokeWidth: row.tableStyle?.strokeWidth ?? 1,
-        cornerRadius: row.tableStyle?.cornerRadius ?? 4,
-        listening: true,
-      });
+    const tableRect = new Konva.Rect({
+      x: -row.seatRadius - (hasTable ? 0 : 4),
+      y: yOffset,
+      width: bodyWidth + (hasTable ? 0 : 8),
+      height: bodyHeight,
+      fill: hasTable
+        ? (row.tableStyle?.fill ?? '#2c2c2c')
+        : (isRowSelected ? 'rgba(59, 130, 246, 0.08)' : 'transparent'),
+      stroke: isRowSelected
+        ? '#3b82f6'
+        : (hasTable ? (row.tableStyle?.stroke ?? '#444444') : 'transparent'),
+      strokeWidth: isRowSelected ? 2.5 : (hasTable ? (row.tableStyle?.strokeWidth ?? 1) : 0),
+      dash: hasTable ? [] : [5, 4],
+      cornerRadius: row.tableStyle?.cornerRadius ?? 4,
+      listening: true,
+    });
 
-      tableRect.on('mouseenter', () => {
-        if (this.draggableNodes) {
-          this.stage.container().style.cursor = 'move';
-        }
-      });
+    tableRect.on('mouseenter', () => {
+      if (this.draggableNodes) {
+        this.stage.container().style.cursor = this.selectedNodeIds.has(row.id)
+          ? 'move'
+          : 'pointer';
+      }
+    });
 
-      tableRect.on('mouseleave', () => {
-        this.stage.container().style.cursor = 'default';
-      });
+    tableRect.on('mouseleave', () => {
+      this.stage.container().style.cursor = 'default';
+    });
 
-      rGroup.add(tableRect);
-    }
+    this.rowRects.set(row.id, tableRect);
+    rGroup.add(tableRect);
 
     // Seats
     for (const seat of row.seats) {
@@ -434,8 +576,21 @@ export class KonvaRenderer implements Renderer {
         }
       });
 
+      seatCircle.on('pointerdown', (e) => {
+        if (this.draggableNodes) {
+          e.cancelBubble = true;
+          if (!this.selectedNodeIds.has(row.id)) {
+            this.options.onNodeClick?.(row.id, 'row', e.evt as MouseEvent);
+            rGroup.draggable(true);
+          }
+        }
+      });
+
       seatCircle.on('click tap', (e) => {
-        if (statusDef.selectable) {
+        if (this.draggableNodes) {
+          e.cancelBubble = true;
+          this.options.onNodeClick?.(row.id, 'row', e.evt as MouseEvent);
+        } else if (statusDef.selectable) {
           this.options.onSeatClick?.(ctx, e.evt as MouseEvent | TouchEvent);
         }
       });
@@ -551,6 +706,57 @@ export class KonvaRenderer implements Renderer {
     return Array.from(this.selectedSeatIds);
   }
 
+  public setSelectedNodeIds(ids: string[]): void {
+    this.selectedNodeIds = new Set(ids);
+
+    // Update buildings
+    for (const [id, line] of this.buildingLines) {
+      const isSel = this.selectedNodeIds.has(id);
+      line.stroke(isSel ? '#3b82f6' : '#4a4a4a');
+      line.strokeWidth(isSel ? 3 : 2);
+      line.fill(isSel ? 'rgba(59, 130, 246, 0.15)' : 'rgba(30, 30, 30, 0.4)');
+      const group = this.buildingGroups.get(id);
+      if (group) {
+        group.draggable(this.draggableNodes && isSel);
+      }
+    }
+
+    // Update zones
+    for (const [id, line] of this.zoneLines) {
+      const isSel = this.selectedNodeIds.has(id);
+      line.stroke(isSel ? '#3b82f6' : 'transparent');
+      line.strokeWidth(isSel ? 3 : 0);
+      const group = this.zoneGroups.get(id);
+      if (group) {
+        group.draggable(this.draggableNodes && isSel);
+      }
+    }
+
+    // Update rows
+    for (const [id, rect] of this.rowRects) {
+      const isSel = this.selectedNodeIds.has(id);
+      const row = this.floorplan?.buildings.flatMap((b) => b.rows ?? []).find((r) => r.id === id);
+      const hasTable = row && row.tableWidth > 0;
+      rect.stroke(isSel ? '#3b82f6' : (hasTable ? (row?.tableStyle?.stroke ?? '#444444') : 'transparent'));
+      rect.strokeWidth(isSel ? 2.5 : (hasTable ? (row?.tableStyle?.strokeWidth ?? 1) : 0));
+      rect.fill(
+        hasTable
+          ? (row?.tableStyle?.fill ?? '#2c2c2c')
+          : (isSel ? 'rgba(59, 130, 246, 0.08)' : 'transparent')
+      );
+      const group = this.rowGroups.get(id);
+      if (group) {
+        group.draggable(this.draggableNodes && isSel);
+      }
+    }
+
+    this.sceneLayer.batchDraw();
+  }
+
+  public getSelectedNodeIds(): string[] {
+    return Array.from(this.selectedNodeIds);
+  }
+
   public setHoveredSeat(seatId: string | null): void {
     if (this.hoveredSeatId === seatId) return;
 
@@ -618,9 +824,7 @@ export class KonvaRenderer implements Renderer {
 
   public setDraggableNodes(enabled: boolean): void {
     this.draggableNodes = enabled;
-    for (const group of this.rowGroups.values()) {
-      group.draggable(enabled);
-    }
+    this.setSelectedNodeIds(Array.from(this.selectedNodeIds));
   }
 
   public getScale(): number {
@@ -636,6 +840,8 @@ export class KonvaRenderer implements Renderer {
     this.stage.destroy();
     this.seatCircles.clear();
     this.seatContexts.clear();
+    this.buildingGroups.clear();
+    this.zoneGroups.clear();
     this.rowGroups.clear();
     this.selectedSeatIds.clear();
   }

@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "license": "GPL-3.0-or-later",
   "scripts": {
-    "start": "nx serve ng-demo"
+    "start": "nx serve ng-demo",
+    "start:angular": "nx serve ng-demo",
+    "start:vanilla": "nx serve demo-vanilla"
   },
   "private": true,
   "dependencies": {

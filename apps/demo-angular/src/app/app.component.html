@@ -1,10 +1,11 @@
 <div class="app-shell">
+  <!-- Top Navigation Header -->
   <header class="app-header">
     <div class="logo-group">
       <div class="logo-badge">S</div>
       <div class="brand-info">
         <span class="brand-title">OpenSeats</span>
-        <span class="tag">Angular</span>
+        <span class="tag">Designer & Viewer</span>
       </div>
     </div>
 
@@ -31,70 +32,22 @@
     </div>
   </header>
 
-  <div class="main-content">
-    <!-- Editor Toolbar -->
-    @if (mode === 'editor') {
-      <aside class="toolbar">
-        <div>
-          <div class="section-title">Tools</div>
-          <div class="tool-grid">
-            <button
-              class="tool-btn"
-              [class.active]="currentTool === 'select'"
-              (click)="setTool('select')"
-            >
-              Select
-            </button>
-            <button
-              class="tool-btn"
-              [class.active]="currentTool === 'pan'"
-              (click)="setTool('pan')"
-            >
-              Pan
-            </button>
-            <button
-              class="tool-btn"
-              [class.active]="currentTool === 'row'"
-              (click)="setTool('row')"
-            >
-              Add Row
-            </button>
-            <button
-              class="tool-btn"
-              [class.active]="currentTool === 'add-seat'"
-              (click)="setTool('add-seat')"
-            >
-              Add Seat
-            </button>
-          </div>
-        </div>
+  <!-- 1. EDITOR MODE: Complete visual editor with tools & properties panels built-in -->
+  @if (mode === 'editor') {
+    <seats-editor
+      style="flex: 1; width: 100%; height: calc(100vh - 56px); min-width: 0;"
+      [floorplan]="floorplan"
+      (change)="onFloorplanChanged($event)"
+      (selectionChange)="onEditorSelectionChanged($event)"
+      (violationsUpdated)="onViolationsUpdated($event)"
+    ></seats-editor>
+  }
 
-        <div>
-          <div class="section-title">History</div>
-          <div class="btn-group">
-            <button class="btn" (click)="undo()">Undo</button>
-            <button class="btn" (click)="redo()">Redo</button>
-          </div>
-        </div>
-
-        <div>
-          <div class="section-title">Preview</div>
-          <button
-            class="btn"
-            [class.btn-primary]="!isPreviewActive"
-            (click)="togglePreview()"
-            style="width: 100%;"
-          >
-            {{ isPreviewActive ? 'Exit Preview' : 'Preview Mode' }}
-          </button>
-        </div>
-      </aside>
-    }
-
-    <!-- Canvas Area -->
-    <main class="canvas-area">
-      <div class="canvas-container">
-        @if (mode === 'viewer') {
+  <!-- 2. VIEWER MODE: Customer reservation experience -->
+  @if (mode === 'viewer') {
+    <div class="main-content">
+      <main class="canvas-area">
+        <div class="canvas-container">
           <seats-viewer
             [floorplan]="floorplan"
             [statuses]="statuses"
@@ -104,102 +57,95 @@
             (seatDeselected)="onSeatDeselected($event)"
             (seatHovered)="onSeatHovered($event)"
           ></seats-viewer>
-        }
-
-        @if (mode === 'editor') {
-          <seats-editor
-            [floorplan]="floorplan"
-            [tool]="currentTool"
-            (change)="onFloorplanChanged($event)"
-            (violationsUpdated)="onViolationsUpdated($event)"
-          ></seats-editor>
-        }
-      </div>
-
-      <div class="floating-controls">
-        <button class="floating-btn" (click)="zoomIn()" title="Zoom In">+</button>
-        <button class="floating-btn" (click)="zoomOut()" title="Zoom Out">-</button>
-      </div>
-    </main>
-
-    <!-- Side Panel -->
-    <aside class="side-panel">
-      <div class="panel-header">
-        <span>Reservation Status</span>
-        @if (selectedSeatIds.length > 0) {
-          <span class="tag selected-tag">
-            {{ selectedSeatIds.length }} selected
-          </span>
-        }
-      </div>
-
-      <div class="panel-body">
-        <div class="card legend-card">
-          <div class="card-title">STATUS PALETTE</div>
-          <div class="legend-row">
-            <div class="legend-left">
-              <span class="dot dot-available"></span>
-              <span>Available</span>
-            </div>
-            <span class="count">Selectable</span>
-          </div>
-          <div class="legend-row">
-            <div class="legend-left">
-              <span class="dot dot-selected"></span>
-              <span>Selected</span>
-            </div>
-            <span class="count">{{ selectedSeatIds.length }}</span>
-          </div>
-          <div class="legend-row">
-            <div class="legend-left">
-              <span class="dot dot-reserved"></span>
-              <span>Reserved</span>
-            </div>
-            <span class="count">Unavailable</span>
-          </div>
-          <div class="legend-row">
-            <div class="legend-left">
-              <span class="dot dot-locked"></span>
-              <span>Locked</span>
-            </div>
-            <span class="count">Admin</span>
-          </div>
         </div>
 
-        @if (selectedSeatIds.length > 0) {
-          <div class="card action-card">
-            <div class="card-title">SELECTED SEATS</div>
-            <div class="seat-tags">
-              @for (label of selectedSeatLabels; track label) {
-                <span class="seat-badge">
-                  {{ label }}
-                </span>
+        <!-- Floating Zoom & Pan Controls for Viewer -->
+        <div class="floating-controls">
+          <button class="floating-btn" (click)="zoomIn()" title="Zoom In">+</button>
+          <button class="floating-btn" (click)="zoomOut()" title="Zoom Out">-</button>
+          <button class="floating-btn" (click)="resetZoom()" title="Reset Zoom">⤾</button>
+        </div>
+      </main>
+
+      <!-- Right Side Panel: Reservation Info & Event stream -->
+      <aside class="side-panel">
+        <div class="panel-header">
+          <span>Reservation Status</span>
+          @if (selectedSeatIds.length > 0) {
+            <span class="tag selected-tag">
+              {{ selectedSeatIds.length }} selected
+            </span>
+          }
+        </div>
+
+        <div class="panel-body">
+          <div class="card legend-card">
+            <div class="card-title">STATUS PALETTE</div>
+            <div class="legend-row">
+              <div class="legend-left">
+                <span class="dot dot-available"></span>
+                <span>Available</span>
+              </div>
+              <span class="count">Selectable</span>
+            </div>
+            <div class="legend-row">
+              <div class="legend-left">
+                <span class="dot dot-selected"></span>
+                <span>Selected</span>
+              </div>
+              <span class="count">{{ selectedSeatIds.length }}</span>
+            </div>
+            <div class="legend-row">
+              <div class="legend-left">
+                <span class="dot dot-reserved"></span>
+                <span>Reserved</span>
+              </div>
+              <span class="count">Unavailable</span>
+            </div>
+            <div class="legend-row">
+              <div class="legend-left">
+                <span class="dot dot-locked"></span>
+                <span>Locked</span>
+              </div>
+              <span class="count">Admin</span>
+            </div>
+          </div>
+
+          @if (selectedSeatIds.length > 0) {
+            <div class="card action-card">
+              <div class="card-title">SELECTED SEATS</div>
+              <div class="seat-tags">
+                @for (label of selectedSeatLabels; track label) {
+                  <span class="seat-badge">
+                    {{ label }}
+                  </span>
+                }
+              </div>
+              <div class="btn-group" style="margin-top: 12px;">
+                <button class="btn btn-primary" style="flex: 1;" (click)="reserveSelected()">
+                  Reserve
+                </button>
+                <button class="btn" style="flex: 1;" (click)="clearSelection()">
+                  Clear
+                </button>
+              </div>
+            </div>
+          }
+
+          <div class="card">
+            <div class="card-title">EVENT STREAM</div>
+            <div class="event-feed">
+              @for (event of eventLog; track event.id) {
+                <div class="event-row">
+                  <span class="event-time">[{{ event.time }}]</span>
+                  <span class="event-name">{{ event.name }}</span>:
+                  <span class="event-detail">{{ event.detail }}</span>
+                </div>
               }
             </div>
-            <div class="btn-group" style="margin-top: 12px;">
-              <button class="btn btn-primary" style="flex: 1;" (click)="reserveSelected()">
-                Reserve
-              </button>
-              <button class="btn" style="flex: 1;" (click)="clearSelection()">
-                Clear
-              </button>
-            </div>
-          </div>
-        }
-
-        <div class="card">
-          <div class="card-title">EVENT STREAM</div>
-          <div class="event-feed">
-            @for (event of eventLog; track event.id) {
-              <div class="event-row">
-                <span class="event-time">[{{ event.time }}]</span>
-                <span class="event-name">{{ event.name }}</span>:
-                <span class="event-detail">{{ event.detail }}</span>
-              </div>
-            }
           </div>
         </div>
-      </div>
-    </aside>
-  </div>
+      </aside>
+    </div>
+  }
 </div>

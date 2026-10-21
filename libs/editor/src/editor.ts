@@ -1,6 +1,11 @@
 import {
   canPlace,
+  flipPolygon,
   inverseTransformPoint,
+  normalizeWinding,
+  polygonBoundingBox,
+  polygonCentroid,
+  scalePolygon,
   transformPoint,
   TypedEventEmitter,
   validateLayout,
@@ -35,6 +40,11 @@ export class Editor implements EditorInstance {
   private activeTool: ToolType = 'select';
   private selectedNodeIds: string[] = [];
   private isPreviewMode = false;
+  private clipboard:
+    | { type: 'building'; data: Building }
+    | { type: 'zone'; data: Zone }
+    | { type: 'row'; data: Row }
+    | null = null;
 
   private rules: EditorRulesConfig;
   private grid: GridSnappingConfig;
@@ -70,6 +80,9 @@ export class Editor implements EditorInstance {
       this.container.tabIndex = 0;
     }
     this.container.addEventListener('keydown', this.onKeyDown);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', this.onKeyDown);
+    }
 
     this.editorCanvasContainer = document.createElement('div');
     this.editorCanvasContainer.className = 'open-seats-editor-canvas';
@@ -86,6 +99,13 @@ export class Editor implements EditorInstance {
           this.selectNodes([nodeId]);
         }
       },
+      onNodeDragStart: (nodeId) => {
+        if (this.activeTool === 'select') {
+          if (!this.selectedNodeIds.includes(nodeId)) {
+            this.selectNodes([nodeId]);
+          }
+        }
+      },
       onNodeDragEnd: (nodeId, _nodeType, pos) => {
         if (this.activeTool === 'select') {
           queueMicrotask(() => {
@@ -93,6 +113,9 @@ export class Editor implements EditorInstance {
             if (!success) {
               // Revert visually to valid position if rejected by canPlace
               this.renderer?.load(this.floorplan);
+              if (this.selectedNodeIds.length > 0) {
+                this.renderer?.setSelectedNodeIds?.(this.selectedNodeIds);
+              }
             }
           });
         }
@@ -119,6 +142,32 @@ export class Editor implements EditorInstance {
       return;
     }
 
+    if (isCtrlOrCmd && (e.key === 'c' || e.key === 'C')) {
+      e.preventDefault();
+      this.copySelection();
+      return;
+    }
+
+    if (isCtrlOrCmd && (e.key === 'x' || e.key === 'X')) {
+      e.preventDefault();
+      this.cutSelection();
+      return;
+    }
+
+    if (isCtrlOrCmd && (e.key === 'v' || e.key === 'V')) {
+      e.preventDefault();
+      this.paste();
+      return;
+    }
+
+    if (isCtrlOrCmd && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      if (this.selectedNodeIds.length > 0) {
+        this.duplicateNode(this.selectedNodeIds[0]);
+      }
+      return;
+    }
+
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (this.selectedNodeIds.length > 0) {
         e.preventDefault();
@@ -135,6 +184,38 @@ export class Editor implements EditorInstance {
       this.clearSelection();
       return;
     }
+
+    // Arrow keys: move/nudge selected items
+    if (this.selectedNodeIds.length > 0) {
+      const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
+      const isInput =
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.tagName === 'SELECT' ||
+          (activeEl as HTMLElement).isContentEditable);
+
+      if (!isInput) {
+        let dx = 0;
+        let dy = 0;
+        const step = e.shiftKey
+          ? (this.grid.enabled ? this.grid.size : 10)
+          : (this.grid.enabled ? this.grid.size : 2);
+
+        if (e.key === 'ArrowUp') dy = -step;
+        else if (e.key === 'ArrowDown') dy = step;
+        else if (e.key === 'ArrowLeft') dx = -step;
+        else if (e.key === 'ArrowRight') dx = step;
+
+        if (dx !== 0 || dy !== 0) {
+          e.preventDefault();
+          for (const id of this.selectedNodeIds) {
+            this.nudgeNode(id, dx, dy);
+          }
+          return;
+        }
+      }
+    }
   };
 
   private snap(pt: Vec2): Vec2 {
@@ -149,6 +230,9 @@ export class Editor implements EditorInstance {
   private emitChange(): void {
     if (this.renderer) {
       this.renderer.load(this.floorplan);
+      if (this.selectedNodeIds.length > 0) {
+        this.renderer.setSelectedNodeIds?.(this.selectedNodeIds);
+      }
     }
     const violations = validateLayout(this.floorplan, {
       tolerance: this.rules.tolerance,
@@ -277,11 +361,13 @@ export class Editor implements EditorInstance {
 
   public selectNodes(ids: string[]): void {
     this.selectedNodeIds = [...ids];
+    this.renderer?.setSelectedNodeIds?.(this.selectedNodeIds);
     this.emitter.emit('selectionChange', this.getSelectedNodeIds());
   }
 
   public clearSelection(): void {
     this.selectedNodeIds = [];
+    this.renderer?.setSelectedNodeIds?.([]);
     this.emitter.emit('selectionChange', []);
   }
 
@@ -443,6 +529,37 @@ export class Editor implements EditorInstance {
     this.commandStack.execute(command);
     this.emitChange();
     return newZone;
+  }
+
+  public createRectangleBuilding(
+    position: Vec2,
+    width: number,
+    height: number,
+    label?: string
+  ): Building | null {
+    const points: Vec2[] = [
+      { x: 0, y: 0 },
+      { x: width, y: 0 },
+      { x: width, y: height },
+      { x: 0, y: height },
+    ];
+    return this.createBuilding(points, label, position);
+  }
+
+  public createRectangleZone(
+    buildingId: string,
+    position: Vec2,
+    width: number,
+    height: number,
+    fill = '#555555'
+  ): Zone | null {
+    const points: Vec2[] = [
+      { x: 0, y: 0 },
+      { x: width, y: 0 },
+      { x: width, y: height },
+      { x: 0, y: height },
+    ];
+    return this.createZone(buildingId, points, fill, position);
   }
 
   public createRow(
@@ -681,6 +798,23 @@ export class Editor implements EditorInstance {
     }
     console.log('no move');
     return false;
+  }
+
+  public getNodePosition(nodeId: string): Vec2 | null {
+    for (const b of this.floorplan.buildings) {
+      if (b.id === nodeId) return { ...b.position };
+      const zone = (b.zones ?? []).find((z) => z.id === nodeId);
+      if (zone) return { ...zone.position };
+      const row = (b.rows ?? []).find((r) => r.id === nodeId);
+      if (row) return { ...row.position };
+    }
+    return null;
+  }
+
+  public nudgeNode(nodeId: string, dx: number, dy: number): boolean {
+    const pos = this.getNodePosition(nodeId);
+    if (!pos) return false;
+    return this.moveNode(nodeId, { x: pos.x + dx, y: pos.y + dy });
   }
 
   public rotateNode(nodeId: string, newRotation: number): boolean {
@@ -1118,6 +1252,823 @@ export class Editor implements EditorInstance {
     return true;
   }
 
+  public setRowSeatRadius(rowId: string, seatRadius: number): boolean {
+    if (seatRadius <= 0) return false;
+    let targetRow: Row | undefined;
+    for (const b of this.floorplan.buildings) {
+      const r = (b.rows ?? []).find((item) => item.id === rowId);
+      if (r) {
+        targetRow = r;
+        break;
+      }
+    }
+    if (!targetRow || targetRow.seatSpacing < 2 * seatRadius) return false;
+
+    if (this.rules.enforce) {
+      const violations = canPlace(
+        this.floorplan,
+        rowId,
+        { seatRadius },
+        { tolerance: this.rules.tolerance }
+      );
+      if (violations.length > 0) return false;
+    }
+
+    const oldRadius = targetRow.seatRadius;
+    this.commandStack.execute({
+      name: `Set Row ${targetRow.label} seat radius`,
+      execute: () => {
+        targetRow!.seatRadius = seatRadius;
+      },
+      undo: () => {
+        targetRow!.seatRadius = oldRadius;
+      },
+    });
+
+    this.emitChange();
+    return true;
+  }
+
+  public setRowSeatCount(rowId: string, seatCount: number): boolean {
+    if (seatCount < 1) return false;
+    let targetRow: Row | undefined;
+    for (const b of this.floorplan.buildings) {
+      const r = (b.rows ?? []).find((item) => item.id === rowId);
+      if (r) {
+        targetRow = r;
+        break;
+      }
+    }
+    if (!targetRow) return false;
+    if (targetRow.seats.length === seatCount) return true;
+
+    const oldSeats = JSON.parse(JSON.stringify(targetRow.seats));
+    const side = targetRow.side;
+    let proposedSeats: Seat[] = [];
+
+    if (seatCount > targetRow.seats.length) {
+      proposedSeats = [...targetRow.seats];
+      const needed = seatCount - targetRow.seats.length;
+
+      if (side === 'both') {
+        let currentMaxIdx =
+          proposedSeats.length > 0
+            ? Math.max(...proposedSeats.map((s) => s.index))
+            : -1;
+        for (let i = 0; i < needed; i++) {
+          const hasA = proposedSeats.some(
+            (s) => s.index === currentMaxIdx && s.side === 'a'
+          );
+          const hasB = proposedSeats.some(
+            (s) => s.index === currentMaxIdx && s.side === 'b'
+          );
+
+          let targetSide: 'a' | 'b' = 'a';
+          let targetIndex = currentMaxIdx;
+
+          if (!hasA) {
+            targetSide = 'a';
+          } else if (!hasB) {
+            targetSide = 'b';
+          } else {
+            currentMaxIdx++;
+            targetIndex = currentMaxIdx;
+            targetSide = 'a';
+          }
+
+          proposedSeats.push({
+            id: NumberingService.nextSeatId(),
+            index: targetIndex,
+            side: targetSide,
+            label: '',
+          });
+        }
+      } else {
+        const currentMaxIdx =
+          proposedSeats.length > 0
+            ? Math.max(...proposedSeats.map((s) => s.index))
+            : -1;
+        for (let i = 0; i < needed; i++) {
+          proposedSeats.push({
+            id: NumberingService.nextSeatId(),
+            index: currentMaxIdx + 1 + i,
+            side: 'a',
+            label: '',
+          });
+        }
+      }
+    } else {
+      const sorted = [...targetRow.seats].sort((a, b) => {
+        if (b.index !== a.index) return b.index - a.index;
+        return b.side.localeCompare(a.side);
+      });
+      proposedSeats = sorted.slice(sorted.length - seatCount);
+    }
+
+    const renumbered = NumberingService.renumberRowSeats({
+      ...targetRow,
+      seats: proposedSeats,
+    });
+
+    if (this.rules.enforce) {
+      const violations = canPlace(
+        this.floorplan,
+        rowId,
+        { seats: renumbered },
+        { tolerance: this.rules.tolerance }
+      );
+      if (violations.length > 0) return false;
+    }
+
+    this.commandStack.execute({
+      name: `Set Row ${targetRow.label} seat count to ${seatCount}`,
+      execute: () => {
+        targetRow!.seats = renumbered;
+      },
+      undo: () => {
+        targetRow!.seats = oldSeats;
+      },
+    });
+
+    this.emitChange();
+    return true;
+  }
+
+
+  // Context Actions: Copy, Cut, Paste, Duplicate, Flip
+  public copySelection(): boolean {
+    if (this.selectedNodeIds.length === 0) return false;
+    const selectedId = this.selectedNodeIds[0];
+
+    const building = this.floorplan.buildings.find((b) => b.id === selectedId);
+    if (building) {
+      this.clipboard = {
+        type: 'building',
+        data: JSON.parse(JSON.stringify(building)),
+      };
+      return true;
+    }
+
+    for (const b of this.floorplan.buildings) {
+      const zone = (b.zones ?? []).find((z) => z.id === selectedId);
+      if (zone) {
+        this.clipboard = {
+          type: 'zone',
+          data: JSON.parse(JSON.stringify(zone)),
+        };
+        return true;
+      }
+      const row = (b.rows ?? []).find((r) => r.id === selectedId);
+      if (row) {
+        this.clipboard = {
+          type: 'row',
+          data: JSON.parse(JSON.stringify(row)),
+        };
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public cutSelection(): boolean {
+    if (this.selectedNodeIds.length === 0) return false;
+    const success = this.copySelection();
+    if (!success) return false;
+
+    const idsToDelete = [...this.selectedNodeIds];
+    for (const id of idsToDelete) {
+      this.deleteNode(id);
+    }
+    this.clearSelection();
+    return true;
+  }
+
+  public canPaste(): boolean {
+    return this.clipboard !== null;
+  }
+
+  public paste(targetBuildingId?: string, offset: Vec2 = { x: 30, y: 30 }): boolean {
+    if (!this.clipboard) return false;
+
+    if (this.clipboard.type === 'building') {
+      const original = this.clipboard.data as Building;
+      const newId = NumberingService.nextBuildingId();
+      const bbox = polygonBoundingBox(original.points);
+      const bWidth = Math.round(bbox.width || 200);
+      const bHeight = Math.round(bbox.height || 200);
+
+      const newBuildingTemplate: Building = {
+        ...JSON.parse(JSON.stringify(original)),
+        id: newId,
+        label: `${original.label} Copy`,
+      };
+
+      for (const z of newBuildingTemplate.zones) {
+        z.id = NumberingService.nextZoneId();
+      }
+      for (const r of newBuildingTemplate.rows) {
+        r.id = NumberingService.nextRowId();
+        for (const s of r.seats) {
+          s.id = NumberingService.nextSeatId();
+        }
+      }
+
+      const candidateOffsets: Vec2[] = [
+        offset,
+        { x: 0, y: 0 },
+        { x: bWidth + 40, y: 0 },
+        { x: 0, y: bHeight + 40 },
+        { x: -(bWidth + 40), y: 0 },
+        { x: 0, y: -(bHeight + 40) },
+        { x: bWidth + 40, y: bHeight + 40 },
+        { x: 40, y: 40 },
+        { x: 80, y: 80 },
+      ];
+
+      let placedBuilding: Building | null = null;
+      for (const cand of candidateOffsets) {
+        const newPos = this.snap({
+          x: original.position.x + cand.x,
+          y: original.position.y + cand.y,
+        });
+        const candidateBuilding = { ...newBuildingTemplate, position: newPos };
+
+        if (!this.rules.enforce) {
+          placedBuilding = candidateBuilding;
+          break;
+        }
+
+        const testPlan: Floorplan = {
+          ...this.floorplan,
+          buildings: [...this.floorplan.buildings, candidateBuilding],
+        };
+        const violations = canPlace(
+          testPlan,
+          newId,
+          {},
+          { tolerance: this.rules.tolerance }
+        );
+        if (violations.length === 0) {
+          placedBuilding = candidateBuilding;
+          break;
+        }
+      }
+
+      if (!placedBuilding) return false;
+
+      const finalBuilding = placedBuilding;
+      this.commandStack.execute({
+        name: `Paste Building ${finalBuilding.label}`,
+        execute: () => {
+          this.floorplan.buildings.push(finalBuilding);
+        },
+        undo: () => {
+          const idx = this.floorplan.buildings.findIndex((b) => b.id === newId);
+          if (idx >= 0) this.floorplan.buildings.splice(idx, 1);
+        },
+      });
+      this.emitChange();
+      this.selectNodes([newId]);
+      return true;
+    }
+
+    let targetBuilding: Building | undefined;
+    if (targetBuildingId) {
+      targetBuilding = this.floorplan.buildings.find(
+        (b) => b.id === targetBuildingId
+      );
+    }
+    if (!targetBuilding && this.selectedNodeIds.length > 0) {
+      const selId = this.selectedNodeIds[0];
+      targetBuilding = this.floorplan.buildings.find((b) => b.id === selId);
+      if (!targetBuilding) {
+        for (const b of this.floorplan.buildings) {
+          if (
+            b.zones.some((z) => z.id === selId) ||
+            b.rows.some((r) => r.id === selId)
+          ) {
+            targetBuilding = b;
+            break;
+          }
+        }
+      }
+    }
+    if (!targetBuilding) {
+      targetBuilding = this.floorplan.buildings[0];
+    }
+    if (!targetBuilding) return false;
+
+    if (this.clipboard.type === 'zone') {
+      const original = this.clipboard.data as Zone;
+      const newId = NumberingService.nextZoneId();
+      const bbox = polygonBoundingBox(original.points);
+      const zWidth = Math.round(bbox.width || 120);
+      const zHeight = Math.round(bbox.height || 80);
+
+      const newZoneTemplate: Zone = {
+        ...JSON.parse(JSON.stringify(original)),
+        id: newId,
+      };
+
+      const candidateOffsets: Vec2[] = [
+        offset,
+        { x: 0, y: 0 },
+        { x: 0, y: zHeight + 20 },
+        { x: zWidth + 20, y: 0 },
+        { x: -(zWidth + 20), y: 0 },
+        { x: 0, y: -(zHeight + 20) },
+        { x: zWidth + 20, y: zHeight + 20 },
+        { x: 30, y: 30 },
+        { x: 60, y: 60 },
+      ];
+
+      let placedZone: Zone | null = null;
+      for (const cand of candidateOffsets) {
+        const newPos = this.snap({
+          x: original.position.x + cand.x,
+          y: original.position.y + cand.y,
+        });
+        const candidateZone = { ...newZoneTemplate, position: newPos };
+
+        if (!this.rules.enforce) {
+          placedZone = candidateZone;
+          break;
+        }
+
+        const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
+        const testB = testPlan.buildings.find(
+          (b) => b.id === targetBuilding!.id
+        )!;
+        testB.zones.push(candidateZone);
+        const violations = canPlace(
+          testPlan,
+          newId,
+          {},
+          { tolerance: this.rules.tolerance }
+        );
+        if (violations.length === 0) {
+          placedZone = candidateZone;
+          break;
+        }
+      }
+
+      if (!placedZone) return false;
+
+      const finalZone = placedZone;
+      this.commandStack.execute({
+        name: `Paste Zone ${newId}`,
+        execute: () => {
+          targetBuilding!.zones.push(finalZone);
+        },
+        undo: () => {
+          const idx = targetBuilding!.zones.findIndex((z) => z.id === newId);
+          if (idx >= 0) targetBuilding!.zones.splice(idx, 1);
+        },
+      });
+      this.emitChange();
+      this.selectNodes([newId]);
+      return true;
+    }
+
+    if (this.clipboard.type === 'row') {
+      const original = this.clipboard.data as Row;
+      const newId = NumberingService.nextRowId();
+      const nextLetter = NumberingService.rowLabel(targetBuilding.rows.length);
+
+      const clonedSeats = original.seats.map((s) => ({
+        ...s,
+        id: NumberingService.nextSeatId(),
+      }));
+
+      const newRowTemplate: Row = {
+        ...JSON.parse(JSON.stringify(original)),
+        id: newId,
+        label: nextLetter,
+        seats: clonedSeats,
+      };
+      newRowTemplate.seats = NumberingService.renumberRowSeats(newRowTemplate);
+
+      const rowHeight = (original.tableWidth ?? 28) + (original.seatRadius ?? 14) * 4;
+      const verticalStep = Math.max(70, Math.round(rowHeight + 10));
+
+      const existingRows = targetBuilding.rows ?? [];
+      const maxY =
+        existingRows.length > 0
+          ? Math.max(...existingRows.map((r) => r.position.y))
+          : original.position.y;
+      const minY =
+        existingRows.length > 0
+          ? Math.min(...existingRows.map((r) => r.position.y))
+          : original.position.y;
+
+      const candidatePositions: Vec2[] = [
+        // 1. Below the bottom-most row in the target building (ideal for sequential duplicates)
+        { x: original.position.x, y: maxY + verticalStep },
+        // 2. Preferred offset relative to original
+        { x: original.position.x + offset.x, y: original.position.y + offset.y },
+        // 3. Original position (crucial if cut was called)
+        { x: original.position.x, y: original.position.y },
+        // 4. Above the top-most row
+        { x: original.position.x, y: minY - verticalStep },
+        // 5. Subsequent slots downwards
+        { x: original.position.x, y: original.position.y + verticalStep },
+        { x: original.position.x, y: original.position.y + verticalStep * 2 },
+        { x: original.position.x, y: original.position.y + verticalStep * 3 },
+        // 6. Slots upwards
+        { x: original.position.x, y: original.position.y - verticalStep },
+        { x: original.position.x, y: original.position.y - verticalStep * 2 },
+        // 7. Slight horizontal shifts if Y is crowded
+        { x: original.position.x + 80, y: maxY + verticalStep },
+        { x: original.position.x - 80, y: maxY + verticalStep },
+      ];
+
+      let placedRow: Row | null = null;
+      for (const candPos of candidatePositions) {
+        const snappedPos = this.snap(candPos);
+        const candidateRow: Row = { ...newRowTemplate, position: snappedPos };
+
+        if (!this.rules.enforce) {
+          placedRow = candidateRow;
+          break;
+        }
+
+        const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
+        const testB = testPlan.buildings.find(
+          (b) => b.id === targetBuilding!.id
+        )!;
+        testB.rows.push(candidateRow);
+        const violations = canPlace(
+          testPlan,
+          newId,
+          {},
+          { tolerance: this.rules.tolerance }
+        );
+        if (violations.length === 0) {
+          placedRow = candidateRow;
+          break;
+        }
+      }
+
+      if (!placedRow) return false;
+
+      const finalRow = placedRow;
+      this.commandStack.execute({
+        name: `Paste Row ${nextLetter}`,
+        execute: () => {
+          targetBuilding!.rows.push(finalRow);
+        },
+        undo: () => {
+          const idx = targetBuilding!.rows.findIndex((r) => r.id === newId);
+          if (idx >= 0) targetBuilding!.rows.splice(idx, 1);
+        },
+      });
+      this.emitChange();
+      this.selectNodes([newId]);
+      return true;
+    }
+
+    return false;
+  }
+
+  public duplicateNode(nodeId: string): boolean {
+    this.selectNodes([nodeId]);
+    if (this.copySelection()) {
+      return this.paste();
+    }
+    return false;
+  }
+
+  public flipNode(
+    nodeId: string,
+    direction: 'horizontal' | 'vertical'
+  ): boolean {
+    const building = this.floorplan.buildings.find((b) => b.id === nodeId);
+    if (building) {
+      const oldPoints = JSON.parse(JSON.stringify(building.points));
+      const oldRows = JSON.parse(JSON.stringify(building.rows));
+      const oldZones = JSON.parse(JSON.stringify(building.zones));
+
+      const flippedPoints = flipPolygon(building.points, direction);
+      const centroid = polygonCentroid(building.points);
+
+      const flippedRows: Row[] = building.rows.map((r) => {
+        const newPos =
+          direction === 'horizontal'
+            ? { x: 2 * centroid.x - r.position.x, y: r.position.y }
+            : { x: r.position.x, y: 2 * centroid.y - r.position.y };
+        const newRot =
+          direction === 'horizontal'
+            ? (180 - r.rotation + 360) % 360
+            : (360 - r.rotation) % 360;
+        return {
+          ...r,
+          position: this.snap(newPos),
+          rotation: newRot,
+        };
+      });
+
+      const flippedZones: Zone[] = building.zones.map((z) => {
+        const newPos =
+          direction === 'horizontal'
+            ? { x: 2 * centroid.x - z.position.x, y: z.position.y }
+            : { x: z.position.x, y: 2 * centroid.y - z.position.y };
+        const newRot =
+          direction === 'horizontal'
+            ? (180 - z.rotation + 360) % 360
+            : (360 - z.rotation) % 360;
+        return {
+          ...z,
+          position: this.snap(newPos),
+          rotation: newRot,
+          points: flipPolygon(z.points, direction),
+        };
+      });
+
+      const proposedBuilding: Building = {
+        ...building,
+        points: flippedPoints,
+        rows: flippedRows,
+        zones: flippedZones,
+      };
+
+      if (this.rules.enforce) {
+        const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
+        const idx = testPlan.buildings.findIndex((b) => b.id === nodeId);
+        testPlan.buildings[idx] = proposedBuilding;
+        const violations = canPlace(
+          testPlan,
+          nodeId,
+          {},
+          { tolerance: this.rules.tolerance }
+        );
+        if (violations.length > 0) return false;
+      }
+
+      this.commandStack.execute({
+        name: `Flip Building ${building.label} ${direction}`,
+        execute: () => {
+          building.points = flippedPoints;
+          building.rows = flippedRows;
+          building.zones = flippedZones;
+        },
+        undo: () => {
+          building.points = oldPoints;
+          building.rows = oldRows;
+          building.zones = oldZones;
+        },
+      });
+      this.emitChange();
+      return true;
+    }
+
+    for (const b of this.floorplan.buildings) {
+      const zone = (b.zones ?? []).find((z) => z.id === nodeId);
+      if (zone) {
+        const oldPoints = JSON.parse(JSON.stringify(zone.points));
+        const flippedPoints = flipPolygon(zone.points, direction);
+
+        if (this.rules.enforce) {
+          const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
+          const testB = testPlan.buildings.find((item) => item.id === b.id)!;
+          const testZ = testB.zones.find((z) => z.id === nodeId)!;
+          testZ.points = flippedPoints;
+          const violations = canPlace(
+            testPlan,
+            nodeId,
+            {},
+            { tolerance: this.rules.tolerance }
+          );
+          if (violations.length > 0) return false;
+        }
+
+        this.commandStack.execute({
+          name: `Flip Zone ${zone.id} ${direction}`,
+          execute: () => {
+            zone.points = flippedPoints;
+          },
+          undo: () => {
+            zone.points = oldPoints;
+          },
+        });
+        this.emitChange();
+        return true;
+      }
+
+      const row = (b.rows ?? []).find((r) => r.id === nodeId);
+      if (row) {
+        const oldRot = row.rotation;
+        const newRot =
+          direction === 'horizontal'
+            ? (180 - row.rotation + 360) % 360
+            : (360 - row.rotation) % 360;
+
+        if (this.rules.enforce) {
+          const violations = canPlace(
+            this.floorplan,
+            nodeId,
+            { rotation: newRot },
+            { tolerance: this.rules.tolerance }
+          );
+          if (violations.length > 0) return false;
+        }
+
+        this.commandStack.execute({
+          name: `Flip Row ${row.label} ${direction}`,
+          execute: () => {
+            row.rotation = newRot;
+          },
+          undo: () => {
+            row.rotation = oldRot;
+          },
+        });
+        this.emitChange();
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  public updateNodeLabel(nodeId: string, label: string): boolean {
+    for (const b of this.floorplan.buildings) {
+      if (b.id === nodeId) {
+        const oldLabel = b.label;
+        this.commandStack.execute({
+          name: `Rename Building to ${label}`,
+          execute: () => {
+            b.label = label;
+          },
+          undo: () => {
+            b.label = oldLabel;
+          },
+        });
+        this.emitChange();
+        return true;
+      }
+      const zone = (b.zones ?? []).find((z) => z.id === nodeId);
+      if (zone) {
+        const oldText = zone.text?.value;
+        this.commandStack.execute({
+          name: `Rename Zone`,
+          execute: () => {
+            if (!zone.text) zone.text = { value: label };
+            else zone.text.value = label;
+          },
+          undo: () => {
+            if (oldText !== undefined) {
+              zone.text!.value = oldText;
+            } else {
+              delete zone.text;
+            }
+          },
+        });
+        this.emitChange();
+        return true;
+      }
+      const row = (b.rows ?? []).find((r) => r.id === nodeId);
+      if (row) {
+        const oldLabel = row.label;
+        this.commandStack.execute({
+          name: `Rename Row to ${label}`,
+          execute: () => {
+            row.label = label;
+            row.seats = NumberingService.renumberRowSeats(row);
+          },
+          undo: () => {
+            row.label = oldLabel;
+            row.seats = NumberingService.renumberRowSeats(row);
+          },
+        });
+        this.emitChange();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public setZoneFill(zoneId: string, fill: string): boolean {
+    for (const b of this.floorplan.buildings) {
+      const zone = (b.zones ?? []).find((z) => z.id === zoneId);
+      if (zone) {
+        const oldFill = zone.fill;
+        this.commandStack.execute({
+          name: `Change Zone Color`,
+          execute: () => {
+            zone.fill = fill;
+          },
+          undo: () => {
+            zone.fill = oldFill;
+          },
+        });
+        this.emitChange();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public scaleShape(nodeId: string, scaleX: number, scaleY: number): boolean {
+    if (scaleX <= 0 || scaleY <= 0) return false;
+
+    const building = this.floorplan.buildings.find((b) => b.id === nodeId);
+    if (building) {
+      const oldPoints = JSON.parse(JSON.stringify(building.points));
+      const scaled = scalePolygon(building.points, scaleX, scaleY);
+
+      if (this.rules.enforce) {
+        const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
+        const testB = testPlan.buildings.find((b) => b.id === nodeId)!;
+        testB.points = scaled;
+        const violations = canPlace(
+          testPlan,
+          nodeId,
+          {},
+          { tolerance: this.rules.tolerance }
+        );
+        if (violations.length > 0) return false;
+      }
+
+      this.commandStack.execute({
+        name: `Scale Building ${building.label}`,
+        execute: () => {
+          building.points = scaled;
+        },
+        undo: () => {
+          building.points = oldPoints;
+        },
+      });
+      this.emitChange();
+      return true;
+    }
+
+    for (const b of this.floorplan.buildings) {
+      const zone = (b.zones ?? []).find((z) => z.id === nodeId);
+      if (zone) {
+        const oldPoints = JSON.parse(JSON.stringify(zone.points));
+        const scaled = scalePolygon(zone.points, scaleX, scaleY);
+
+        if (this.rules.enforce) {
+          const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
+          const testB = testPlan.buildings.find((item) => item.id === b.id)!;
+          const testZ = testB.zones.find((z) => z.id === nodeId)!;
+          testZ.points = scaled;
+          const violations = canPlace(
+            testPlan,
+            nodeId,
+            {},
+            { tolerance: this.rules.tolerance }
+          );
+          if (violations.length > 0) return false;
+        }
+
+        this.commandStack.execute({
+          name: `Scale Zone ${zone.id}`,
+          execute: () => {
+            zone.points = scaled;
+          },
+          undo: () => {
+            zone.points = oldPoints;
+          },
+        });
+        this.emitChange();
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  public setShapeDimensions(
+    nodeId: string,
+    width: number,
+    height: number
+  ): boolean {
+    if (width <= 0 || height <= 0) return false;
+
+    let points: Vec2[] | undefined;
+    const b = this.floorplan.buildings.find((b) => b.id === nodeId);
+    if (b) {
+      points = b.points;
+    } else {
+      for (const building of this.floorplan.buildings) {
+        const z = (building.zones ?? []).find((zone) => zone.id === nodeId);
+        if (z) {
+          points = z.points;
+          break;
+        }
+      }
+    }
+
+    if (!points || points.length === 0) return false;
+    const bbox = polygonBoundingBox(points);
+    if (bbox.width <= 0 || bbox.height <= 0) return false;
+
+    const scaleX = width / bbox.width;
+    const scaleY = height / bbox.height;
+    return this.scaleShape(nodeId, scaleX, scaleY);
+  }
+
+
   // ----------------------------------------------------
   // Polygon Vertex Editing (Buildings and Zones)
   // ----------------------------------------------------
@@ -1274,6 +2225,9 @@ export class Editor implements EditorInstance {
 
   public destroy(): void {
     this.container.removeEventListener('keydown', this.onKeyDown);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', this.onKeyDown);
+    }
     if (this.embeddedViewer) {
       this.embeddedViewer.destroy();
     }

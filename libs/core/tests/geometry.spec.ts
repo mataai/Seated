@@ -8,11 +8,14 @@ import {
   isSelfIntersecting,
   isValidPolygon,
   normalizeWinding,
+  flipPolygon,
   pointInPolygon,
   polygonArea,
+  polygonBoundingBox,
   polygonCentroid,
   polygonSignedArea,
   rotate,
+  scalePolygon,
   segmentsCrossInterior,
   sub,
   transformPoint,
@@ -130,4 +133,34 @@ describe('Geometry primitives', () => {
     expect(isSelfIntersecting(validSquare)).toBe(false);
     expect(isValidPolygon(validSquare)).toBe(true);
   });
+
+  it('computes bounding box, scales, and flips polygons correctly', () => {
+    const square = [
+      vec2(0, 0),
+      vec2(20, 0),
+      vec2(20, 10),
+      vec2(0, 10),
+    ];
+    const bbox = polygonBoundingBox(square);
+    expect(bbox.width).toBe(20);
+    expect(bbox.height).toBe(10);
+    expect(bbox.minX).toBe(0);
+    expect(bbox.maxX).toBe(20);
+
+    const scaled = scalePolygon(square, 2, 2); // 2x centered at (10, 5)
+    const scaledBbox = polygonBoundingBox(scaled);
+    expect(scaledBbox.width).toBeCloseTo(40);
+    expect(scaledBbox.height).toBeCloseTo(20);
+
+    const triangle = [
+      vec2(0, 0),
+      vec2(10, 0),
+      vec2(0, 10),
+    ];
+    const flippedH = flipPolygon(triangle, 'horizontal');
+    expect(isValidPolygon(flippedH)).toBe(true);
+    const flippedV = flipPolygon(triangle, 'vertical');
+    expect(isValidPolygon(flippedV)).toBe(true);
+  });
 });
+

@@ -307,5 +307,164 @@ describe('Editor (@open-seats/editor)', () => {
     editor.togglePreview(false);
     expect(editor.isPreview()).toBe(false);
   });
+
+  it('creates rectangle building and zone with valid geometry', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+
+    const newBuilding = editor.createRectangleBuilding({ x: 50, y: 500 }, 300, 200, 'South Wing');
+    expect(newBuilding).not.toBeNull();
+    expect(newBuilding!.points.length).toBe(4);
+    expect(editor.getFloorplan().buildings.length).toBe(3);
+
+    const newZone = editor.createRectangleZone(newBuilding!.id, { x: 20, y: 20 }, 100, 60, '#ff4444');
+    expect(newZone).not.toBeNull();
+    expect(newZone!.points.length).toBe(4);
+    expect(editor.getFloorplan().buildings[2].zones.length).toBe(1);
+  });
+
+  it('supports context actions: copy, cut, paste, and duplicate', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const row = editor.createRow('b-1', { x: 100, y: 100 }, 4)!;
+    expect(row).not.toBeNull();
+
+    // Select row and copy
+    editor.selectNodes([row.id]);
+    expect(editor.copySelection()).toBe(true);
+    expect(editor.canPaste()).toBe(true);
+
+    // Paste
+    expect(editor.paste('b-1', { x: 0, y: 60 })).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows.length).toBe(2);
+
+    // Cut row
+    editor.selectNodes([row.id]);
+    expect(editor.cutSelection()).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows.length).toBe(1);
+
+    // Paste the cut row back
+    expect(editor.paste('b-1', { x: 0, y: 0 })).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows.length).toBe(2);
+  });
+
+  it('supports flipping nodes (horizontal and vertical)', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const row = editor.createRow('b-1', { x: 100, y: 100 }, 4, { rotation: 45 })!;
+
+    expect(editor.flipNode(row.id, 'horizontal')).toBe(true);
+    const flippedRow = editor.getFloorplan().buildings[0].rows[0];
+    expect(flippedRow.rotation).toBe(135);
+
+    expect(editor.flipNode(row.id, 'vertical')).toBe(true);
+    const flippedVRow = editor.getFloorplan().buildings[0].rows[0];
+    expect(flippedVRow.rotation).toBe(225);
+  });
+
+  it('adjusts quantity of seats in a row dynamically', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const row = editor.createRow('b-1', { x: 100, y: 100 }, 4)!;
+    expect(row.seats.length).toBe(4);
+
+    // Increase seats to 8
+    expect(editor.setRowSeatCount(row.id, 8)).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows[0].seats.length).toBe(8);
+
+    // Decrease seats to 2
+    expect(editor.setRowSeatCount(row.id, 2)).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows[0].seats.length).toBe(2);
+
+    // Undo restores to 8
+    expect(editor.undo()).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows[0].seats.length).toBe(8);
+  });
+
+  it('adjusts size of shapes via setShapeDimensions', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const zone = editor.createRectangleZone('b-1', { x: 100, y: 100 }, 100, 80)!;
+    expect(zone).not.toBeNull();
+
+    expect(editor.setShapeDimensions(zone.id, 150, 100)).toBe(true);
+    const updatedZone = editor.getFloorplan().buildings[0].zones[0];
+    expect(updatedZone).toBeDefined();
+
+    // Undo restores size
+    expect(editor.undo()).toBe(true);
+  });
+
+  it('moves selected items around via nudgeNode', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const row = editor.createRow('b-1', { x: 100, y: 100 }, 4)!;
+    expect(row).not.toBeNull();
+
+    const initialPos = editor.getNodePosition(row.id);
+    expect(initialPos).toEqual({ x: 100, y: 100 });
+
+    // Nudge right and down
+    expect(editor.nudgeNode(row.id, 20, 30)).toBe(true);
+    expect(editor.getNodePosition(row.id)).toEqual({ x: 120, y: 130 });
+
+    // Undo restores position
+    expect(editor.undo()).toBe(true);
+    expect(editor.getNodePosition(row.id)).toEqual({ x: 100, y: 100 });
+  });
+
+  it('moves selected items around via keyboard arrow keys', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const row = editor.createRow('b-1', { x: 150, y: 150 }, 4)!;
+    expect(row).not.toBeNull();
+
+    // Select row
+    editor.selectNodes([row.id]);
+    expect(editor.getSelectedNodeIds()).toEqual([row.id]);
+
+    // Dispatch ArrowRight keydown
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
+    );
+
+    const posAfterRight = editor.getNodePosition(row.id);
+    expect(posAfterRight?.x).toBeGreaterThan(150);
+
+    // Dispatch ArrowDown keydown
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })
+    );
+    const posAfterDown = editor.getNodePosition(row.id);
+    expect(posAfterDown?.y).toBeGreaterThan(150);
+  });
+
+  it('copies, duplicates, cuts, and pastes rows and zones successfully', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const row = editor.createRow('b-1', { x: 100, y: 100 }, 4)!;
+    expect(row).not.toBeNull();
+    expect(editor.getFloorplan().buildings[0].rows.length).toBe(1);
+
+    // Duplicate row
+    editor.selectNodes([row.id]);
+    expect(editor.canPaste()).toBe(false);
+    expect(editor.duplicateNode(row.id)).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows.length).toBe(2);
+
+    // Copy selected row
+    const secondRowId = editor.getSelectedNodeIds()[0];
+    expect(secondRowId).toBeDefined();
+    expect(editor.copySelection()).toBe(true);
+    expect(editor.canPaste()).toBe(true);
+
+    // Paste copied row
+    expect(editor.paste()).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows.length).toBe(3);
+
+    // Cut a row
+    const thirdRowId = editor.getSelectedNodeIds()[0];
+    expect(editor.cutSelection()).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows.length).toBe(2);
+    expect(editor.canPaste()).toBe(true);
+
+    // Paste the cut row back
+    expect(editor.paste()).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows.length).toBe(3);
+  });
 });
+
+
 
