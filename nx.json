@@ -87,5 +87,6 @@
       "preVersionCommand": "npx nx run-many -t build"
     }
   },
-  "defaultProject": "ng-demo"
+  "defaultProject": "ng-demo",
+  "analytics": false
 }
