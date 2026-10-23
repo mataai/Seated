@@ -7,6 +7,7 @@ import {
   type Floorplan,
   type Row,
   type Seat,
+  type Vec2,
   type Zone,
 } from '@open-seats/core';
 import type {
@@ -33,6 +34,7 @@ export class KonvaRenderer implements Renderer {
   private stage: Konva.Stage;
   private backgroundLayer: Konva.Layer;
   private sceneLayer: Konva.Layer;
+  private overlayLayer: Konva.Layer;
 
   private floorplan: Floorplan | null = null;
   private statusRegistry: StatusRegistry;
@@ -88,9 +90,11 @@ export class KonvaRenderer implements Renderer {
 
     this.backgroundLayer = new Konva.Layer({ name: 'background' });
     this.sceneLayer = new Konva.Layer({ name: 'scene' });
+    this.overlayLayer = new Konva.Layer({ name: 'overlay' });
 
     this.stage.add(this.backgroundLayer);
     this.stage.add(this.sceneLayer);
+    this.stage.add(this.overlayLayer);
 
     this.setupInteractions();
     this.setupResizeObserver();
@@ -191,6 +195,20 @@ export class KonvaRenderer implements Renderer {
 
     this.stage.on('touchend', () => {
       this.lastTouchDist = 0;
+    });
+
+    this.stage.on('click tap', (e) => {
+      const worldPos = this.getPointerWorldPosition();
+      if (worldPos && this.options.onStageClick) {
+        this.options.onStageClick(worldPos, e.evt as MouseEvent | TouchEvent, e.target);
+      }
+    });
+
+    this.stage.on('mousemove', (e) => {
+      const worldPos = this.getPointerWorldPosition();
+      if (worldPos && this.options.onStageMouseMove) {
+        this.options.onStageMouseMove(worldPos, e.evt as MouseEvent);
+      }
     });
   }
 
@@ -303,7 +321,9 @@ export class KonvaRenderer implements Renderer {
       });
 
       bLine.on('mouseleave', () => {
-        this.stage.container().style.cursor = 'default';
+        if (this.draggableNodes) {
+          this.stage.container().style.cursor = 'default';
+        }
       });
 
       bLine.on('pointerdown', (e) => {
@@ -393,7 +413,9 @@ export class KonvaRenderer implements Renderer {
     });
 
     zLine.on('mouseleave', () => {
-      this.stage.container().style.cursor = 'default';
+      if (this.draggableNodes) {
+        this.stage.container().style.cursor = 'default';
+      }
     });
 
     zLine.on('pointerdown', (e) => {
@@ -529,7 +551,9 @@ export class KonvaRenderer implements Renderer {
     });
 
     tableRect.on('mouseleave', () => {
-      this.stage.container().style.cursor = 'default';
+      if (this.draggableNodes) {
+        this.stage.container().style.cursor = 'default';
+      }
     });
 
     this.rowRects.set(row.id, tableRect);
@@ -825,6 +849,218 @@ export class KonvaRenderer implements Renderer {
   public setDraggableNodes(enabled: boolean): void {
     this.draggableNodes = enabled;
     this.setSelectedNodeIds(Array.from(this.selectedNodeIds));
+  }
+
+  public setStageDraggable(enabled: boolean): void {
+    this.stage.draggable(enabled);
+  }
+
+  public setCursor(cursor: string): void {
+    this.stage.container().style.cursor = cursor;
+  }
+
+  public getPointerWorldPosition(): Vec2 | null {
+    const pointer = this.stage.getPointerPosition();
+    if (!pointer) return null;
+    const scale = this.stage.scaleX() || 1;
+    return {
+      x: (pointer.x - this.stage.x()) / scale,
+      y: (pointer.y - this.stage.y()) / scale,
+    };
+  }
+
+  public clearDraftPolygon(): void {
+    this.overlayLayer.destroyChildren();
+    this.overlayLayer.batchDraw();
+  }
+
+  public renderDraftPolygon(points: Vec2[], previewPoint?: Vec2 | null): void {
+    this.overlayLayer.destroyChildren();
+    if (!points || points.length === 0) {
+      this.overlayLayer.batchDraw();
+      return;
+    }
+
+    const scale = this.stage.scaleX() || 1;
+    const allPts = previewPoint ? [...points, previewPoint] : [...points];
+
+    const isClosing =
+      points.length >= 3 &&
+      previewPoint &&
+      points.some(
+        (p) => Math.hypot(p.x - previewPoint.x, p.y - previewPoint.y) <= 14 / scale
+      );
+
+    // 1. Translucent fill preview if >= 3 points
+    if (allPts.length >= 3) {
+      const flatFillPts: number[] = [];
+      for (const pt of allPts) {
+        flatFillPts.push(pt.x, pt.y);
+      }
+      const fillPoly = new Konva.Line({
+        points: flatFillPts,
+        closed: true,
+        fill: isClosing ? 'rgba(16, 185, 129, 0.22)' : 'rgba(99, 102, 241, 0.12)',
+        listening: false,
+      });
+      this.overlayLayer.add(fillPoly);
+    }
+
+    // 2. Solid edges between confirmed points
+    if (points.length >= 2) {
+      const flatConfirmedPts: number[] = [];
+      for (const pt of points) {
+        flatConfirmedPts.push(pt.x, pt.y);
+      }
+      const confirmedLine = new Konva.Line({
+        points: flatConfirmedPts,
+        stroke: '#4f46e5',
+        strokeWidth: 2.5 / scale,
+        lineCap: 'round',
+        lineJoin: 'round',
+        shadowColor: '#4f46e5',
+        shadowBlur: 4,
+        shadowOpacity: 0.35,
+        listening: false,
+      });
+      this.overlayLayer.add(confirmedLine);
+    }
+
+    // 3. Dynamic rubberband edge to preview point
+    if (previewPoint && points.length > 0) {
+      const lastPt = points[points.length - 1];
+      const previewLine = new Konva.Line({
+        points: [lastPt.x, lastPt.y, previewPoint.x, previewPoint.y],
+        stroke: isClosing ? '#10b981' : '#6366f1',
+        strokeWidth: 2 / scale,
+        dash: [6 / scale, 4 / scale],
+        lineCap: 'round',
+        listening: false,
+      });
+      this.overlayLayer.add(previewLine);
+
+      // Closing guide line back to first point
+      if (points.length >= 2 && !isClosing) {
+        const firstPt = points[0];
+        const closingGuide = new Konva.Line({
+          points: [previewPoint.x, previewPoint.y, firstPt.x, firstPt.y],
+          stroke: 'rgba(99, 102, 241, 0.45)',
+          strokeWidth: 1.5 / scale,
+          dash: [4 / scale, 4 / scale],
+          listening: false,
+        });
+        this.overlayLayer.add(closingGuide);
+      }
+    }
+
+    // 4. Vertex handles
+    points.forEach((pt, idx) => {
+      const isFirst = idx === 0;
+      const canClose = isFirst && points.length >= 3;
+
+      if (canClose) {
+        const ring = new Konva.Circle({
+          x: pt.x,
+          y: pt.y,
+          radius: (isClosing ? 12 : 9) / scale,
+          stroke: '#10b981',
+          strokeWidth: 2 / scale,
+          dash: [4 / scale, 3 / scale],
+          listening: false,
+        });
+        this.overlayLayer.add(ring);
+      }
+
+      const circle = new Konva.Circle({
+        x: pt.x,
+        y: pt.y,
+        radius: (canClose ? 6 : 5) / scale,
+        fill: canClose ? '#10b981' : '#ffffff',
+        stroke: canClose ? '#ffffff' : '#4f46e5',
+        strokeWidth: 2 / scale,
+        shadowColor: '#000000',
+        shadowBlur: 3,
+        shadowOpacity: 0.25,
+        listening: false,
+      });
+      this.overlayLayer.add(circle);
+    });
+
+    this.overlayLayer.batchDraw();
+  }
+
+  public renderDraftRectangle(
+    corner1: Vec2,
+    currentCorner: Vec2,
+    isInvalid = false
+  ): void {
+    this.overlayLayer.destroyChildren();
+
+    const scale = this.stage.scaleX() || 1;
+    const minX = Math.min(corner1.x, currentCorner.x);
+    const minY = Math.min(corner1.y, currentCorner.y);
+    const width = Math.abs(currentCorner.x - corner1.x);
+    const height = Math.abs(currentCorner.y - corner1.y);
+
+    const fillColor = isInvalid
+      ? 'rgba(239, 68, 68, 0.2)'
+      : 'rgba(99, 102, 241, 0.15)';
+    const strokeColor = isInvalid ? '#ef4444' : '#4f46e5';
+
+    // 1. Translucent fill rectangle
+    const rect = new Konva.Rect({
+      x: minX,
+      y: minY,
+      width,
+      height,
+      fill: fillColor,
+      stroke: strokeColor,
+      strokeWidth: 2 / scale,
+      dash: isInvalid ? [4 / scale, 4 / scale] : [6 / scale, 4 / scale],
+      listening: false,
+    });
+    this.overlayLayer.add(rect);
+
+    // 2. Corner markers
+    const corners = [
+      { x: corner1.x, y: corner1.y, isStart: true },
+      { x: currentCorner.x, y: currentCorner.y, isStart: false },
+    ];
+    for (const c of corners) {
+      const circle = new Konva.Circle({
+        x: c.x,
+        y: c.y,
+        radius: (c.isStart ? 6 : 5) / scale,
+        fill: isInvalid ? '#ef4444' : (c.isStart ? '#10b981' : '#ffffff'),
+        stroke: isInvalid ? '#ffffff' : (c.isStart ? '#ffffff' : '#4f46e5'),
+        strokeWidth: 2 / scale,
+        shadowColor: '#000000',
+        shadowBlur: 3,
+        shadowOpacity: 0.25,
+        listening: false,
+      });
+      this.overlayLayer.add(circle);
+    }
+
+    // 3. Live dimensions badge
+    if (width > 20 && height > 15) {
+      const textVal = isInvalid
+        ? `${Math.round(width)} × ${Math.round(height)} px (overlaps building)`
+        : `${Math.round(width)} × ${Math.round(height)} px`;
+      const text = new Konva.Text({
+        x: minX + 8 / scale,
+        y: minY + 8 / scale,
+        text: textVal,
+        fontSize: 11 / scale,
+        fontFamily: 'sans-serif',
+        fontStyle: 'bold',
+        fill: isInvalid ? '#f87171' : '#38bdf8',
+        listening: false,
+      });
+      this.overlayLayer.add(text);
+    }
+
+    this.overlayLayer.batchDraw();
   }
 
   public getScale(): number {

@@ -33,12 +33,19 @@ export interface EditorOptions {
   gridSnapping?: Partial<GridSnappingConfig>;
 }
 
+export type BuildingCreationMode = 'outline' | 'rectangle';
+
 export interface EditorEvents {
   change: Floorplan;
   toolChange: ToolType;
   selectionChange: string[];
   previewToggle: boolean;
   violationsUpdated: Violation[];
+  buildingCreationStarted: BuildingCreationMode;
+  buildingCreationPointsChange: Vec2[];
+  buildingCreationCompleted: Building;
+  buildingCreationCancelled: void;
+  buildingCreationFailed: { reason: string; violations?: Violation[] };
 }
 
 
@@ -59,6 +66,14 @@ export interface EditorInstance {
   getSelectedNodeIds(): string[];
   selectNodes(ids: string[]): void;
   clearSelection(): void;
+
+  // Interactive building creation
+  startBuildingCreation(label?: string, mode?: BuildingCreationMode): void;
+  cancelBuildingCreation(): void;
+  finishBuildingCreation(): Building | null;
+  isCreatingBuilding(): boolean;
+  getDraftBuildingPoints(): Vec2[];
+  getBuildingCreationMode(): BuildingCreationMode;
 
   // Viewport / Zoom & Pan
   zoomIn(factor?: number): void;

@@ -1,10 +1,12 @@
 import {
+  buildingFootprint,
   canPlace,
   flipPolygon,
   inverseTransformPoint,
   normalizeWinding,
   polygonBoundingBox,
   polygonCentroid,
+  polygonsOverlap,
   scalePolygon,
   transformPoint,
   TypedEventEmitter,
@@ -23,6 +25,7 @@ import { createViewer, type ViewerInstance } from '@open-seats/viewer';
 import { Command, CommandStack } from './history/command-stack';
 import { NumberingService } from './numbering/numbering-service';
 import type {
+  BuildingCreationMode,
   EditorEvents,
   EditorInstance,
   EditorOptions,
@@ -45,6 +48,11 @@ export class Editor implements EditorInstance {
     | { type: 'zone'; data: Zone }
     | { type: 'row'; data: Row }
     | null = null;
+
+  private isDrawingBuilding = false;
+  private buildingCreationMode: BuildingCreationMode = 'outline';
+  private draftBuildingPoints: Vec2[] = [];
+  private draftBuildingLabel?: string;
 
   private rules: EditorRulesConfig;
   private grid: GridSnappingConfig;
@@ -120,6 +128,12 @@ export class Editor implements EditorInstance {
           });
         }
       },
+      onStageClick: (worldPos, evt) => {
+        this.handleStageClick(worldPos, evt);
+      },
+      onStageMouseMove: (worldPos, evt) => {
+        this.handleStageMouseMove(worldPos, evt);
+      },
     });
   }
 
@@ -181,6 +195,10 @@ export class Editor implements EditorInstance {
 
     if (e.key === 'Escape') {
       e.preventDefault();
+      if (this.isDrawingBuilding || this.activeTool === 'building') {
+        this.cancelBuildingCreation();
+        return;
+      }
       this.clearSelection();
       return;
     }
@@ -242,6 +260,9 @@ export class Editor implements EditorInstance {
   }
 
   public loadFloorplan(floorplan: Floorplan): void {
+    if (this.isDrawingBuilding) {
+      this.cancelBuildingCreation();
+    }
     this.floorplan = JSON.parse(JSON.stringify(floorplan));
     this.commandStack.clear();
     this.selectedNodeIds = [];
@@ -253,13 +274,252 @@ export class Editor implements EditorInstance {
   }
 
   public setTool(tool: ToolType): void {
+    if (tool === 'building') {
+      this.startBuildingCreation();
+      return;
+    }
+    if (this.isDrawingBuilding) {
+      this.cancelBuildingCreation();
+    }
     this.activeTool = tool;
     this.renderer?.setDraggableNodes(tool === 'select');
+    this.renderer?.setStageDraggable(true);
+    this.renderer?.setCursor(tool === 'pan' ? 'grab' : 'default');
     this.emitter.emit('toolChange', tool);
   }
 
   public getTool(): ToolType {
     return this.activeTool;
+  }
+
+  public startBuildingCreation(
+    label?: string,
+    mode: BuildingCreationMode = 'outline'
+  ): void {
+    this.isDrawingBuilding = true;
+    this.buildingCreationMode = mode;
+    this.draftBuildingPoints = [];
+    this.draftBuildingLabel = label;
+    this.activeTool = 'building';
+    this.clearSelection();
+    this.renderer?.setDraggableNodes(false);
+    this.renderer?.setStageDraggable(false);
+    this.renderer?.setCursor('crosshair');
+    this.renderer?.clearDraftPolygon();
+    this.emitter.emit('toolChange', 'building');
+    this.emitter.emit('buildingCreationStarted', mode);
+  }
+
+  public getBuildingCreationMode(): BuildingCreationMode {
+    return this.buildingCreationMode;
+  }
+
+  public cancelBuildingCreation(): void {
+    const wasDrawing = this.isDrawingBuilding || this.activeTool === 'building';
+    this.isDrawingBuilding = false;
+    this.draftBuildingPoints = [];
+    this.draftBuildingLabel = undefined;
+    this.renderer?.clearDraftPolygon();
+    this.renderer?.setStageDraggable(true);
+    this.renderer?.setCursor('default');
+    this.activeTool = 'select';
+    this.renderer?.setDraggableNodes(true);
+    this.emitter.emit('toolChange', 'select');
+    if (wasDrawing) {
+      this.emitter.emit('buildingCreationCancelled', undefined);
+    }
+  }
+
+  public finishBuildingCreation(): Building | null {
+    if (!this.isDrawingBuilding || this.draftBuildingPoints.length < 3) {
+      return null;
+    }
+
+    const rawPoints = [...this.draftBuildingPoints];
+    const minX = Math.min(...rawPoints.map((p) => p.x));
+    const minY = Math.min(...rawPoints.map((p) => p.y));
+
+    const localPoints = rawPoints.map((p) => ({
+      x: Math.round((p.x - minX) * 100) / 100,
+      y: Math.round((p.y - minY) * 100) / 100,
+    }));
+    const position = {
+      x: Math.round(minX * 100) / 100,
+      y: Math.round(minY * 100) / 100,
+    };
+
+    const label = this.draftBuildingLabel;
+    const createdBuilding = this.createBuilding(localPoints, label, position);
+    if (createdBuilding) {
+      this.isDrawingBuilding = false;
+      this.draftBuildingPoints = [];
+      this.draftBuildingLabel = undefined;
+      this.renderer?.clearDraftPolygon();
+      this.renderer?.setStageDraggable(true);
+      this.renderer?.setCursor('default');
+      this.activeTool = 'select';
+      this.renderer?.setDraggableNodes(true);
+      this.emitter.emit('toolChange', 'select');
+      this.selectNodes([createdBuilding.id]);
+      this.emitter.emit('buildingCreationCompleted', createdBuilding);
+    } else {
+      this.emitter.emit('buildingCreationFailed', {
+        reason: 'Cannot create building: outline overlaps with an existing building.',
+      });
+    }
+    return createdBuilding;
+  }
+
+  public isCreatingBuilding(): boolean {
+    return this.isDrawingBuilding;
+  }
+
+  public getDraftBuildingPoints(): Vec2[] {
+    return [...this.draftBuildingPoints];
+  }
+
+  private handleStageClick(worldPos: Vec2, _evt: MouseEvent | TouchEvent): void {
+    if (!this.isDrawingBuilding) return;
+
+    if (this.buildingCreationMode === 'rectangle') {
+      const snappedPos = this.snap(worldPos);
+
+      // Corner 1: set starting corner
+      if (this.draftBuildingPoints.length === 0) {
+        this.draftBuildingPoints.push(snappedPos);
+        this.emitter.emit('buildingCreationPointsChange', [...this.draftBuildingPoints]);
+        this.renderer?.renderDraftRectangle(snappedPos, snappedPos);
+        return;
+      }
+
+      // Corner 2: opposite corner
+      const corner1 = this.draftBuildingPoints[0];
+      const corner2 = snappedPos;
+      const width = Math.abs(corner2.x - corner1.x);
+      const height = Math.abs(corner2.y - corner1.y);
+
+      // Ignore if dimensions too small (e.g. accidental click in place)
+      if (width < 10 || height < 10) {
+        return;
+      }
+
+      const minX = Math.min(corner1.x, corner2.x);
+      const minY = Math.min(corner1.y, corner2.y);
+      const localPoints: Vec2[] = [
+        { x: 0, y: 0 },
+        { x: width, y: 0 },
+        { x: width, y: height },
+        { x: 0, y: height },
+      ];
+      const position: Vec2 = {
+        x: Math.round(minX * 100) / 100,
+        y: Math.round(minY * 100) / 100,
+      };
+
+      const label = this.draftBuildingLabel;
+      const createdBuilding = this.createBuilding(localPoints, label, position);
+      if (createdBuilding) {
+        this.isDrawingBuilding = false;
+        this.draftBuildingPoints = [];
+        this.draftBuildingLabel = undefined;
+        this.renderer?.clearDraftPolygon();
+        this.renderer?.setStageDraggable(true);
+        this.renderer?.setCursor('default');
+        this.activeTool = 'select';
+        this.renderer?.setDraggableNodes(true);
+        this.emitter.emit('toolChange', 'select');
+        this.selectNodes([createdBuilding.id]);
+        this.emitter.emit('buildingCreationCompleted', createdBuilding);
+      } else {
+        // Creation failed (e.g. overlap with another building).
+        // Reset corner placement so user can immediately click new corners without being stuck!
+        this.draftBuildingPoints = [];
+        this.renderer?.clearDraftPolygon();
+        this.emitter.emit('buildingCreationPointsChange', []);
+        this.emitter.emit('buildingCreationFailed', {
+          reason: 'Cannot create building: overlaps with an existing building.',
+        });
+      }
+      return;
+    }
+
+    // Outline mode
+    const scale = this.renderer?.getScale() ?? 1;
+    const hitThreshold = 14 / scale;
+
+    const existingIndex = this.draftBuildingPoints.findIndex(
+      (pt) => Math.hypot(pt.x - worldPos.x, pt.y - worldPos.y) <= hitThreshold
+    );
+
+    // If clicked on an existing point:
+    // If 3 or more points exist -> complete and save building!
+    // If fewer than 3 points exist -> ignore click on existing point (avoid duplicate point)
+    if (existingIndex !== -1) {
+      if (this.draftBuildingPoints.length >= 3) {
+        this.finishBuildingCreation();
+      }
+      return;
+    }
+
+    // Add new point (snapped to grid)
+    const ptToAdd = this.snap(worldPos);
+
+    if (this.draftBuildingPoints.length > 0) {
+      const lastPt = this.draftBuildingPoints[this.draftBuildingPoints.length - 1];
+      if (Math.hypot(lastPt.x - ptToAdd.x, lastPt.y - ptToAdd.y) <= 2) {
+        return;
+      }
+    }
+
+    this.draftBuildingPoints.push(ptToAdd);
+    this.emitter.emit('buildingCreationPointsChange', [...this.draftBuildingPoints]);
+    this.renderer?.renderDraftPolygon(this.draftBuildingPoints, ptToAdd);
+  }
+
+  private handleStageMouseMove(worldPos: Vec2, _evt: MouseEvent): void {
+    if (!this.isDrawingBuilding) return;
+    if (this.draftBuildingPoints.length === 0) return;
+
+    if (this.buildingCreationMode === 'rectangle') {
+      const corner1 = this.draftBuildingPoints[0];
+      const corner2 = this.snap(worldPos);
+
+      let isInvalid = false;
+      if (this.rules.enforce) {
+        const width = Math.abs(corner2.x - corner1.x);
+        const height = Math.abs(corner2.y - corner1.y);
+        if (width >= 10 && height >= 10) {
+          const minX = Math.min(corner1.x, corner2.x);
+          const minY = Math.min(corner1.y, corner2.y);
+          const proposedPoly: Vec2[] = [
+            { x: minX, y: minY },
+            { x: minX + width, y: minY },
+            { x: minX + width, y: minY + height },
+            { x: minX, y: minY + height },
+          ];
+          for (const b of this.floorplan.buildings) {
+            const bPoly = buildingFootprint(b);
+            if (polygonsOverlap(proposedPoly, bPoly, this.rules.tolerance)) {
+              isInvalid = true;
+              break;
+            }
+          }
+        }
+      }
+
+      this.renderer?.renderDraftRectangle(corner1, corner2, isInvalid);
+      return;
+    }
+
+    const scale = this.renderer?.getScale() ?? 1;
+    const hitThreshold = 14 / scale;
+
+    const nearbyPt = this.draftBuildingPoints.find(
+      (pt) => Math.hypot(pt.x - worldPos.x, pt.y - worldPos.y) <= hitThreshold
+    );
+
+    const preview = nearbyPt ?? this.snap(worldPos);
+    this.renderer?.renderDraftPolygon(this.draftBuildingPoints, preview);
   }
 
   public setGridSnapping(enabled: boolean, size?: number): void {
@@ -458,6 +718,7 @@ export class Editor implements EditorInstance {
         { tolerance: this.rules.tolerance }
       );
       if (violations.length > 0) {
+        this.emitter.emit('violationsUpdated', violations);
         return null;
       }
     }

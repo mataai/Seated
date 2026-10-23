@@ -4,6 +4,7 @@ import type {
   Row,
   Seat,
   StatusRegistry,
+  Vec2,
 } from '@open-seats/core';
 
 export interface RenderSeatContext {
@@ -41,6 +42,8 @@ export interface RendererOptions {
   onSeatHover?: (ctx: RenderSeatContext, evt: MouseEvent) => void;
   onSeatHoverEnd?: (ctx: RenderSeatContext, evt: MouseEvent) => void;
   onSelectionChange?: (selectedIds: string[]) => void;
+  onStageClick?: (pos: Vec2, evt: MouseEvent | TouchEvent, target?: unknown) => void;
+  onStageMouseMove?: (pos: Vec2, evt: MouseEvent) => void;
   onReady?: () => void;
 }
 
@@ -58,6 +61,12 @@ export interface Renderer {
   getSelectedNodeIds?(): string[];
   setHoveredSeat(seatId: string | null): void;
   setDraggableNodes(enabled: boolean): void;
+  setStageDraggable(enabled: boolean): void;
+  setCursor(cursor: string): void;
+  renderDraftPolygon(points: Vec2[], previewPoint?: Vec2 | null): void;
+  renderDraftRectangle(corner1: Vec2, currentCorner: Vec2, isInvalid?: boolean): void;
+  clearDraftPolygon(): void;
+  getPointerWorldPosition(): Vec2 | null;
   zoomIn(factor?: number): void;
   zoomOut(factor?: number): void;
   resetZoom(): void;

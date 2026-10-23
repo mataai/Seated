@@ -22,6 +22,14 @@
           >
             Pan
           </button>
+          <button
+            class="tool-btn"
+            [class.active]="currentTool === 'building'"
+            (click)="setTool('building')"
+            title="Draw building outline"
+          >
+            Draw Building
+          </button>
         </div>
 
         <div class="btn-group" style="margin-top: 8px;">
@@ -123,58 +131,61 @@
                 <div class="toggle-group">
                   <button
                     class="toggle-btn"
+                    [class.active]="buildingDrawMode === 'draw'"
+                    (click)="buildingDrawMode = 'draw'"
+                  >
+                    Draw Outline
+                  </button>
+                  <button
+                    class="toggle-btn"
                     [class.active]="buildingDrawMode === 'rect'"
                     (click)="buildingDrawMode = 'rect'"
                   >
                     Rectangle
                   </button>
-                  <button
-                    class="toggle-btn"
-                    [class.active]="buildingDrawMode === 'poly'"
-                    (click)="buildingDrawMode = 'poly'"
-                  >
-                    Preset Poly
-                  </button>
                 </div>
               </div>
 
-              @if (buildingDrawMode === 'rect') {
-                <div class="form-row">
-                  <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Width (px)</label>
-                    <input
-                      type="number"
-                      class="form-input"
-                      [value]="newBuildingWidth"
-                      (input)="newBuildingWidth = +$any($event.target).value"
-                      min="100"
-                      step="20"
-                    />
+              @if (buildingDrawMode === 'draw') {
+                <div class="draw-building-info-card">
+                  <div class="draw-status-row">
+                    <span class="status-indicator" [class.active]="isDrawingBuilding && buildingCreationMode === 'outline'"></span>
+                    <span class="draw-status-text">
+                      {{ (isDrawingBuilding && buildingCreationMode === 'outline') ? 'Outline drawing active' : 'Click on floorplan to draw' }}
+                    </span>
                   </div>
-                  <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Height (px)</label>
-                    <input
-                      type="number"
-                      class="form-input"
-                      [value]="newBuildingHeight"
-                      (input)="newBuildingHeight = +$any($event.target).value"
-                      min="100"
-                      step="20"
-                    />
-                  </div>
+                  <p class="draw-help-text">
+                    Click anywhere on the floorplan to create building edges. After placing 3 or more points, click on an existing point to close and save the building.
+                  </p>
+                  @if (isDrawingBuilding && buildingCreationMode === 'outline') {
+                    <div class="points-counter-badge">
+                      Points placed: <strong>{{ draftPointsCount }}</strong>
+                      @if (draftPointsCount >= 3) {
+                        <span class="ready-badge">✓ Ready to close!</span>
+                      }
+                    </div>
+                  }
                 </div>
               } @else {
-                <div class="form-group">
-                  <label class="form-label">Polygon Preset</label>
-                  <select
-                    class="form-select"
-                    [value]="newBuildingPolyPreset"
-                    (change)="newBuildingPolyPreset = $any($event.target).value"
-                  >
-                    <option value="l-shape">L-Shape Pavilion</option>
-                    <option value="hexagon">Hexagon Arena</option>
-                    <option value="octagon">Octagon Rotunda</option>
-                  </select>
+                <div class="draw-building-info-card">
+                  <div class="draw-status-row">
+                    <span class="status-indicator" [class.active]="isDrawingBuilding && buildingCreationMode === 'rectangle'"></span>
+                    <span class="draw-status-text">
+                      {{ (isDrawingBuilding && buildingCreationMode === 'rectangle') ? 'Rectangle creation active' : 'Interactive 2-corner placement' }}
+                    </span>
+                  </div>
+                  <p class="draw-help-text">
+                    Click on the floorplan to set the first corner, then move and click the opposite corner to form the rectangular building.
+                  </p>
+                  @if (isDrawingBuilding && buildingCreationMode === 'rectangle') {
+                    <div class="points-counter-badge">
+                      @if (draftPointsCount === 0) {
+                        Click 1st corner
+                      } @else {
+                        Corner 1 placed — <span class="ready-badge">✓ Click opposite corner to save!</span>
+                      }
+                    </div>
+                  }
                 </div>
               }
 
@@ -190,11 +201,19 @@
               </div>
 
               <button
-                class="btn btn-primary"
+                class="btn"
+                [class.btn-primary]="!isDrawingBuilding"
+                [class.btn-danger]="isDrawingBuilding"
                 style="width: 100%; margin-top: 6px;"
                 (click)="createBuildingFromForm()"
               >
-                + Create Building
+                @if (isDrawingBuilding) {
+                  ✕ Cancel Drawing
+                } @else if (buildingDrawMode === 'rect') {
+                  📐 Draw Rectangle (2 Corners)
+                } @else {
+                  ✏️ Start Drawing Outline
+                }
               </button>
             </div>
           }
@@ -404,6 +423,36 @@
 
   <!-- 2. CENTER CANVAS CONTAINER -->
   <main class="editor-main-area seats-editor-canvas-area">
+    <!-- Drawing Building Guidance Pill -->
+    @if (isDrawingBuilding) {
+      <div class="drawing-guidance-pill" [class.has-error]="buildingCreationError">
+        <span class="pill-dot"></span>
+        <span class="pill-icon">{{ buildingCreationError ? '⚠️' : (buildingCreationMode === 'rectangle' ? '📐' : '✏️') }}</span>
+        <span class="pill-text">
+          @if (buildingCreationError) {
+            <strong class="text-danger">{{ buildingCreationError }}</strong> Click on an open area to place the 1st corner.
+          } @else if (buildingCreationMode === 'rectangle') {
+            @if (draftPointsCount === 0) {
+              Click on the floorplan to place the <strong>1st corner</strong> of the rectangle.
+            } @else {
+              1st corner placed — Move and click the <strong>opposite corner</strong> to finish rectangle!
+            }
+          } @else {
+            @if (draftPointsCount === 0) {
+              Click on the floorplan to place the 1st corner of the building.
+            } @else if (draftPointsCount < 3) {
+              Click to place corners (<strong>{{ draftPointsCount }}</strong> placed, need 3+ to close).
+            } @else {
+              <strong>{{ draftPointsCount }}</strong> points placed — Click on an existing point to close and save building!
+            }
+          }
+        </span>
+        <button class="pill-cancel-btn" (click)="cancelBuildingCreation()" title="Cancel drawing (Esc)">
+          ✕ Cancel
+        </button>
+      </div>
+    }
+
     <!-- Layout Violations Banner -->
     @if (lastViolations.length > 0) {
       <div class="violations-banner">
@@ -514,34 +563,6 @@
                   [value]="selectedBuilding.position.y"
                   (input)="updateSelectedPosition(selectedBuilding.position.x, +$any($event.target).value)"
                 />
-              </div>
-            </div>
-
-            <!-- Move / Nudge Controls -->
-            <div class="move-nudge-section">
-              <div class="sub-title">MOVE / NUDGE ITEM</div>
-              <div class="nudge-widget">
-                <div class="dpad-box">
-                  <button class="dpad-btn dpad-up" (click)="nudgeSelected(0, -nudgeStep)" title="Move Up (Arrow Up)">▲</button>
-                  <div class="dpad-row">
-                    <button class="dpad-btn dpad-left" (click)="nudgeSelected(-nudgeStep, 0)" title="Move Left (Arrow Left)">◀</button>
-                    <div class="dpad-step-badge">{{ nudgeStep }}px</div>
-                    <button class="dpad-btn dpad-right" (click)="nudgeSelected(nudgeStep, 0)" title="Move Right (Arrow Right)">▶</button>
-                  </div>
-                  <button class="dpad-btn dpad-down" (click)="nudgeSelected(0, nudgeStep)" title="Move Down (Arrow Down)">▼</button>
-                </div>
-                <div class="nudge-step-selector">
-                  <span class="step-label">Step:</span>
-                  <div class="chip-group-mini">
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 1" (click)="setNudgeStep(1)">1px</button>
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 5" (click)="setNudgeStep(5)">5px</button>
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 10" (click)="setNudgeStep(10)">10px</button>
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 25" (click)="setNudgeStep(25)">25px</button>
-                  </div>
-                </div>
-              </div>
-              <div class="keyboard-tip">
-                <span class="kbd-icon">⌨</span> Drag on canvas or use <b>Arrow keys</b> (Shift for 10x)
               </div>
             </div>
 
@@ -656,34 +677,6 @@
                   [value]="selectedZone.zone.position.y"
                   (input)="updateSelectedPosition(selectedZone.zone.position.x, +$any($event.target).value)"
                 />
-              </div>
-            </div>
-
-            <!-- Move / Nudge Controls -->
-            <div class="move-nudge-section">
-              <div class="sub-title">MOVE / NUDGE ITEM</div>
-              <div class="nudge-widget">
-                <div class="dpad-box">
-                  <button class="dpad-btn dpad-up" (click)="nudgeSelected(0, -nudgeStep)" title="Move Up (Arrow Up)">▲</button>
-                  <div class="dpad-row">
-                    <button class="dpad-btn dpad-left" (click)="nudgeSelected(-nudgeStep, 0)" title="Move Left (Arrow Left)">◀</button>
-                    <div class="dpad-step-badge">{{ nudgeStep }}px</div>
-                    <button class="dpad-btn dpad-right" (click)="nudgeSelected(nudgeStep, 0)" title="Move Right (Arrow Right)">▶</button>
-                  </div>
-                  <button class="dpad-btn dpad-down" (click)="nudgeSelected(0, nudgeStep)" title="Move Down (Arrow Down)">▼</button>
-                </div>
-                <div class="nudge-step-selector">
-                  <span class="step-label">Step:</span>
-                  <div class="chip-group-mini">
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 1" (click)="setNudgeStep(1)">1px</button>
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 5" (click)="setNudgeStep(5)">5px</button>
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 10" (click)="setNudgeStep(10)">10px</button>
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 25" (click)="setNudgeStep(25)">25px</button>
-                  </div>
-                </div>
-              </div>
-              <div class="keyboard-tip">
-                <span class="kbd-icon">⌨</span> Drag on canvas or use <b>Arrow keys</b> (Shift for 10x)
               </div>
             </div>
 
@@ -864,34 +857,6 @@
                   [value]="selectedRow.row.position.y"
                   (input)="updateSelectedPosition(selectedRow.row.position.x, +$any($event.target).value)"
                 />
-              </div>
-            </div>
-
-            <!-- Move / Nudge Controls -->
-            <div class="move-nudge-section">
-              <div class="sub-title">MOVE / NUDGE ITEM</div>
-              <div class="nudge-widget">
-                <div class="dpad-box">
-                  <button class="dpad-btn dpad-up" (click)="nudgeSelected(0, -nudgeStep)" title="Move Up (Arrow Up)">▲</button>
-                  <div class="dpad-row">
-                    <button class="dpad-btn dpad-left" (click)="nudgeSelected(-nudgeStep, 0)" title="Move Left (Arrow Left)">◀</button>
-                    <div class="dpad-step-badge">{{ nudgeStep }}px</div>
-                    <button class="dpad-btn dpad-right" (click)="nudgeSelected(nudgeStep, 0)" title="Move Right (Arrow Right)">▶</button>
-                  </div>
-                  <button class="dpad-btn dpad-down" (click)="nudgeSelected(0, nudgeStep)" title="Move Down (Arrow Down)">▼</button>
-                </div>
-                <div class="nudge-step-selector">
-                  <span class="step-label">Step:</span>
-                  <div class="chip-group-mini">
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 1" (click)="setNudgeStep(1)">1px</button>
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 5" (click)="setNudgeStep(5)">5px</button>
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 10" (click)="setNudgeStep(10)">10px</button>
-                    <button class="chip-mini-btn" [class.active]="nudgeStep === 25" (click)="setNudgeStep(25)">25px</button>
-                  </div>
-                </div>
-              </div>
-              <div class="keyboard-tip">
-                <span class="kbd-icon">⌨</span> Drag on canvas or use <b>Arrow keys</b> (Shift for 10x)
               </div>
             </div>
 

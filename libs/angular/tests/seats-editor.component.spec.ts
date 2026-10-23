@@ -89,4 +89,53 @@ describe('SeatsEditorComponent', () => {
     component.redo();
     expect(component.getFloorplan()?.buildings.length).toBe(1);
   });
+
+  it('manages building drawing creation mode and updates state', () => {
+    component.floorplan = {
+      schemaVersion: 1,
+      dimensions: { width: 1000, height: 1000 },
+      buildings: [],
+    };
+    fixture.detectChanges();
+
+    expect(component.isDrawingBuilding).toBe(false);
+    expect(component.draftPointsCount).toBe(0);
+
+    component.startBuildingCreation('New Arena');
+    fixture.detectChanges();
+
+    expect(component.isDrawingBuilding).toBe(true);
+    expect(component.currentTool).toBe('building');
+
+    component.cancelBuildingCreation();
+    fixture.detectChanges();
+
+    expect(component.isDrawingBuilding).toBe(false);
+    expect(component.currentTool).toBe('select');
+  });
+
+  it('updates buildingCreationError when buildingCreationFailed event is received', () => {
+    component.floorplan = {
+      schemaVersion: 1,
+      dimensions: { width: 1000, height: 1000 },
+      buildings: [],
+    };
+    fixture.detectChanges();
+
+    component.startBuildingCreation('New Arena');
+    fixture.detectChanges();
+
+    (component as any).editor?.emitter?.emit('buildingCreationFailed', {
+      reason: 'Cannot create building: overlaps with an existing building.',
+    });
+    fixture.detectChanges();
+
+    expect(component.buildingCreationError).toBe(
+      'Cannot create building: overlaps with an existing building.'
+    );
+
+    component.cancelBuildingCreation();
+    fixture.detectChanges();
+    expect(component.buildingCreationError).toBeNull();
+  });
 });

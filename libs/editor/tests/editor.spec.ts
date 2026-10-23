@@ -464,6 +464,227 @@ describe('Editor (@open-seats/editor)', () => {
     expect(editor.paste()).toBe(true);
     expect(editor.getFloorplan().buildings[0].rows.length).toBe(3);
   });
+
+  it('creates a building by drawing outline points and clicking an existing point', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const initialBuildingCount = editor.getFloorplan().buildings.length;
+
+    editor.startBuildingCreation('New Pavilion');
+    expect(editor.isCreatingBuilding()).toBe(true);
+    expect(editor.getTool()).toBe('building');
+    expect(editor.getDraftBuildingPoints().length).toBe(0);
+
+    const editorAny = editor as any;
+
+    // Click point 1
+    editorAny.handleStageClick({ x: 50, y: 500 }, new MouseEvent('click'));
+    expect(editor.getDraftBuildingPoints().length).toBe(1);
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount);
+
+    // Click point 2
+    editorAny.handleStageClick({ x: 250, y: 500 }, new MouseEvent('click'));
+    expect(editor.getDraftBuildingPoints().length).toBe(2);
+
+    // Click point 3
+    editorAny.handleStageClick({ x: 250, y: 700 }, new MouseEvent('click'));
+    expect(editor.getDraftBuildingPoints().length).toBe(3);
+
+    // Click point 4
+    editorAny.handleStageClick({ x: 50, y: 700 }, new MouseEvent('click'));
+    expect(editor.getDraftBuildingPoints().length).toBe(4);
+
+    // Click on existing point (point 1 at 50, 500) to finish and save!
+    editorAny.handleStageClick({ x: 50, y: 500 }, new MouseEvent('click'));
+
+    expect(editor.isCreatingBuilding()).toBe(false);
+    expect(editor.getTool()).toBe('select');
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+
+    const createdBuilding = editor.getFloorplan().buildings[initialBuildingCount];
+    expect(createdBuilding.label).toBe('New Pavilion');
+    expect(createdBuilding.points.length).toBe(4);
+    expect(createdBuilding.position.x).toBe(50);
+    expect(createdBuilding.position.y).toBe(500);
+
+    // Selected node should be the newly created building
+    expect(editor.getSelectedNodeIds()).toContain(createdBuilding.id);
+
+    // Undo should remove the new building
+    expect(editor.undo()).toBe(true);
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount);
+
+    // Redo should restore the new building
+    expect(editor.redo()).toBe(true);
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+  });
+
+  it('does not save building if clicking an existing point when fewer than 3 points exist', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const initialBuildingCount = editor.getFloorplan().buildings.length;
+
+    editor.startBuildingCreation('Incomplete');
+    const editorAny = editor as any;
+
+    // Point 1
+    editorAny.handleStageClick({ x: 50, y: 500 }, new MouseEvent('click'));
+    // Point 2
+    editorAny.handleStageClick({ x: 200, y: 500 }, new MouseEvent('click'));
+
+    // Click near Point 1 with only 2 points
+    editorAny.handleStageClick({ x: 50, y: 500 }, new MouseEvent('click'));
+
+    // Should NOT close or save building
+    expect(editor.isCreatingBuilding()).toBe(true);
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount);
+
+    // Point 3
+    editorAny.handleStageClick({ x: 200, y: 650 }, new MouseEvent('click'));
+    expect(editor.getDraftBuildingPoints().length).toBe(3);
+
+    // Now clicking existing point closes and saves!
+    editorAny.handleStageClick({ x: 50, y: 500 }, new MouseEvent('click'));
+    expect(editor.isCreatingBuilding()).toBe(false);
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+  });
+
+  it('cancels building creation on cancelBuildingCreation() or Escape', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    editor.startBuildingCreation();
+    const editorAny = editor as any;
+
+    editorAny.handleStageClick({ x: 100, y: 100 }, new MouseEvent('click'));
+    expect(editor.getDraftBuildingPoints().length).toBe(1);
+
+    editor.cancelBuildingCreation();
+    expect(editor.isCreatingBuilding()).toBe(false);
+    expect(editor.getDraftBuildingPoints().length).toBe(0);
+    expect(editor.getTool()).toBe('select');
+  });
+
+  it('creates a rectangular building interactively by clicking two opposite corners', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const initialBuildingCount = editor.getFloorplan().buildings.length;
+
+    editor.startBuildingCreation('East Hall', 'rectangle');
+    expect(editor.isCreatingBuilding()).toBe(true);
+    expect(editor.getBuildingCreationMode()).toBe('rectangle');
+    expect(editor.getTool()).toBe('building');
+    expect(editor.getDraftBuildingPoints().length).toBe(0);
+
+    const editorAny = editor as any;
+
+    // Click corner 1 (top-left)
+    editorAny.handleStageClick({ x: 50, y: 500 }, new MouseEvent('click'));
+    expect(editor.getDraftBuildingPoints().length).toBe(1);
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount);
+
+    // Mouse move simulates live rectangle stretch
+    editorAny.handleStageMouseMove({ x: 350, y: 750 }, new MouseEvent('mousemove'));
+
+    // Click opposite corner 2 (bottom-right)
+    editorAny.handleStageClick({ x: 350, y: 750 }, new MouseEvent('click'));
+
+    expect(editor.isCreatingBuilding()).toBe(false);
+    expect(editor.getTool()).toBe('select');
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+
+    const createdBuilding = editor.getFloorplan().buildings[initialBuildingCount];
+    expect(createdBuilding.label).toBe('East Hall');
+    expect(createdBuilding.position.x).toBe(50);
+    expect(createdBuilding.position.y).toBe(500);
+    expect(createdBuilding.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 300, y: 0 },
+      { x: 300, y: 250 },
+      { x: 0, y: 250 },
+    ]);
+
+    expect(editor.getSelectedNodeIds()).toContain(createdBuilding.id);
+
+    // Undo removes it
+    expect(editor.undo()).toBe(true);
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount);
+
+    // Redo restores it
+    expect(editor.redo()).toBe(true);
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+  });
+
+  it('normalizes rectangle creation when second corner is clicked up-and-left from first corner', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const initialBuildingCount = editor.getFloorplan().buildings.length;
+
+    editor.startBuildingCreation('Reversed Hall', 'rectangle');
+    const editorAny = editor as any;
+
+    // Corner 1 at bottom-right
+    editorAny.handleStageClick({ x: 350, y: 750 }, new MouseEvent('click'));
+    // Corner 2 at top-left
+    editorAny.handleStageClick({ x: 50, y: 500 }, new MouseEvent('click'));
+
+    expect(editor.isCreatingBuilding()).toBe(false);
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+
+    const createdBuilding = editor.getFloorplan().buildings[initialBuildingCount];
+    expect(createdBuilding.label).toBe('Reversed Hall');
+    expect(createdBuilding.position.x).toBe(50);
+    expect(createdBuilding.position.y).toBe(500);
+    expect(createdBuilding.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 300, y: 0 },
+      { x: 300, y: 250 },
+      { x: 0, y: 250 },
+    ]);
+  });
+
+  it('handles creating a rectangle building over an existing building gracefully without getting stuck', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const initialBuildingCount = editor.getFloorplan().buildings.length;
+
+    let failedEvent: any = null;
+    let violationsEvent: any = null;
+    editor.on('buildingCreationFailed', (payload) => {
+      failedEvent = payload;
+    });
+    editor.on('violationsUpdated', (violations) => {
+      violationsEvent = violations;
+    });
+
+    editor.startBuildingCreation('Overlapping Hall', 'rectangle');
+    expect(editor.isCreatingBuilding()).toBe(true);
+
+    const editorAny = editor as any;
+
+    // Corner 1 inside existing building b-1 (which spans 0,0 to 500,400)
+    editorAny.handleStageClick({ x: 100, y: 100 }, new MouseEvent('click'));
+    expect(editor.getDraftBuildingPoints().length).toBe(1);
+
+    // Corner 2 inside building b-1
+    editorAny.handleStageClick({ x: 300, y: 300 }, new MouseEvent('click'));
+
+    // Building should NOT have been added due to overlap violation
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount);
+
+    // buildingCreationFailed and violationsUpdated should have fired
+    expect(failedEvent).not.toBeNull();
+    expect(failedEvent.reason).toContain('overlaps');
+    expect(violationsEvent).not.toBeNull();
+    expect(violationsEvent.some((v: any) => v.rule === 'building-overlap')).toBe(true);
+
+    // Editor should NOT be broken: it should still be in building creation mode with draft points reset
+    expect(editor.isCreatingBuilding()).toBe(true);
+    expect(editor.getTool()).toBe('building');
+    expect(editor.getDraftBuildingPoints().length).toBe(0);
+
+    // User can immediately place new corners in an open area and succeed!
+    editorAny.handleStageClick({ x: 50, y: 500 }, new MouseEvent('click'));
+    expect(editor.getDraftBuildingPoints().length).toBe(1);
+
+    editorAny.handleStageClick({ x: 350, y: 750 }, new MouseEvent('click'));
+    expect(editor.isCreatingBuilding()).toBe(false);
+    expect(editor.getTool()).toBe('select');
+    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+  });
 });
 
 

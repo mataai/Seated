@@ -80,11 +80,14 @@ export class SeatsEditorComponent
   public editionsTab: 'buildings' | 'zones' | 'rows' = 'buildings';
 
   // Editions Forms - Buildings
-  public buildingDrawMode: 'rect' | 'poly' = 'rect';
+  public buildingDrawMode: 'draw' | 'rect' = 'draw';
+  public buildingCreationMode: 'outline' | 'rectangle' = 'outline';
   public newBuildingLabel = 'Building';
   public newBuildingWidth = 420;
   public newBuildingHeight = 320;
-  public newBuildingPolyPreset: 'l-shape' | 'hexagon' | 'octagon' = 'l-shape';
+  public isDrawingBuilding = false;
+  public draftPointsCount = 0;
+  public buildingCreationError: string | null = null;
 
   // Editions Forms - Zones
   public zoneTargetBuildingId = '';
@@ -241,6 +244,50 @@ export class SeatsEditorComponent
         this.ngZone.run(() => {
           this.lastViolations = violations;
           this.violationsUpdated.emit(violations);
+          this.cdr.markForCheck();
+        });
+      });
+
+      this.editor.on('buildingCreationStarted', (mode) => {
+        this.ngZone.run(() => {
+          this.isDrawingBuilding = true;
+          this.buildingCreationMode = mode || (this.buildingDrawMode === 'rect' ? 'rectangle' : 'outline');
+          this.draftPointsCount = 0;
+          this.buildingCreationError = null;
+          this.cdr.markForCheck();
+        });
+      });
+
+      this.editor.on('buildingCreationPointsChange', (pts) => {
+        this.ngZone.run(() => {
+          this.draftPointsCount = pts.length;
+          this.buildingCreationError = null;
+          this.cdr.markForCheck();
+        });
+      });
+
+      this.editor.on('buildingCreationCompleted', (b) => {
+        this.ngZone.run(() => {
+          this.isDrawingBuilding = false;
+          this.draftPointsCount = 0;
+          this.buildingCreationError = null;
+          this.selectNode(b.id, 'building');
+          this.cdr.markForCheck();
+        });
+      });
+
+      this.editor.on('buildingCreationCancelled', () => {
+        this.ngZone.run(() => {
+          this.isDrawingBuilding = false;
+          this.draftPointsCount = 0;
+          this.buildingCreationError = null;
+          this.cdr.markForCheck();
+        });
+      });
+
+      this.editor.on('buildingCreationFailed', (payload) => {
+        this.ngZone.run(() => {
+          this.buildingCreationError = payload.reason;
           this.cdr.markForCheck();
         });
       });
@@ -447,6 +494,28 @@ export class SeatsEditorComponent
     return res;
   }
 
+  public startBuildingCreation(
+    label?: string,
+    mode?: 'outline' | 'rectangle'
+  ): void {
+    const creationMode =
+      mode || (this.buildingDrawMode === 'rect' ? 'rectangle' : 'outline');
+    this.buildingCreationMode = creationMode;
+    this.editor?.startBuildingCreation(
+      label || this.newBuildingLabel || 'Building',
+      creationMode
+    );
+    this.cdr.markForCheck();
+  }
+
+  public cancelBuildingCreation(): void {
+    this.editor?.cancelBuildingCreation();
+    this.isDrawingBuilding = false;
+    this.draftPointsCount = 0;
+    this.buildingCreationError = null;
+    this.cdr.markForCheck();
+  }
+
   public createRectangleBuilding(
     position: Vec2,
     width: number,
@@ -461,62 +530,14 @@ export class SeatsEditorComponent
   }
 
   public createBuildingFromForm(): Building | null {
-    const label = this.newBuildingLabel || 'Building';
-    const bCount = this.currentFloorplan?.buildings?.length ?? 0;
-    const posX = 40 + (bCount % 3) * 60;
-    const posY = 40 + (bCount % 3) * 60;
-
-    let created: Building | null = null;
-    if (this.buildingDrawMode === 'rect') {
-      created = this.createRectangleBuilding(
-        { x: posX, y: posY },
-        this.newBuildingWidth,
-        this.newBuildingHeight,
-        label
-      );
-    } else {
-      let points: Vec2[] = [];
-      const w = this.newBuildingWidth;
-      const h = this.newBuildingHeight;
-
-      if (this.newBuildingPolyPreset === 'l-shape') {
-        points = [
-          { x: 0, y: 0 },
-          { x: w, y: 0 },
-          { x: w, y: h * 0.5 },
-          { x: w * 0.5, y: h * 0.5 },
-          { x: w * 0.5, y: h },
-          { x: 0, y: h },
-        ];
-      } else if (this.newBuildingPolyPreset === 'hexagon') {
-        points = [
-          { x: w * 0.25, y: 0 },
-          { x: w * 0.75, y: 0 },
-          { x: w, y: h * 0.5 },
-          { x: w * 0.75, y: h },
-          { x: w * 0.25, y: h },
-          { x: 0, y: h * 0.5 },
-        ];
-      } else {
-        const d = Math.min(w, h) * 0.25;
-        points = [
-          { x: d, y: 0 },
-          { x: w - d, y: 0 },
-          { x: w, y: d },
-          { x: w, y: h - d },
-          { x: w - d, y: h },
-          { x: d, y: h },
-          { x: 0, y: h - d },
-          { x: 0, y: d },
-        ];
-      }
-      created = this.createBuilding(points, label, { x: posX, y: posY });
+    if (this.isDrawingBuilding) {
+      this.cancelBuildingCreation();
+      return null;
     }
 
-    if (created) {
-      this.selectNode(created.id, 'building');
-    }
-    return created;
+    const mode = this.buildingDrawMode === 'rect' ? 'rectangle' : 'outline';
+    this.startBuildingCreation(this.newBuildingLabel, mode);
+    return null;
   }
 
   public createZone(
