@@ -2,7 +2,6 @@ import type { Vec2 } from '../schema/types';
 import {
   cross,
   sub,
-  distanceToSegment,
   distanceToSegmentSq,
   approxEqual,
 } from './vec2';

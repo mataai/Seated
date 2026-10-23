@@ -1,16 +1,18 @@
-import {
+import type {
   AfterViewInit,
-  Component,
   ElementRef,
+  OnChanges,
+  OnDestroy,
+  SimpleChanges} from '@angular/core';
+import {
+  Component,
   EventEmitter,
   Input,
   NgZone,
-  OnChanges,
-  OnDestroy,
   Output,
-  SimpleChanges,
   ViewChild,
-  ChangeDetectionStrategy
+  ChangeDetectionStrategy,
+  inject,
 } from '@angular/core';
 import type { Floorplan, Violation } from '@open-seats/core';
 import {
@@ -65,8 +67,7 @@ export class SeatsViewerComponent
   @Output() violationsUpdated = new EventEmitter<Violation[]>();
 
   private viewer?: ViewerInstance;
-
-  constructor(private ngZone: NgZone) {}
+  private ngZone = inject(NgZone);
 
   ngAfterViewInit(): void {
     this.ngZone.runOutsideAngular(() => {
@@ -112,19 +113,20 @@ export class SeatsViewerComponent
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.viewer) return;
+    const viewer = this.viewer;
+    if (!viewer) return;
 
     this.ngZone.runOutsideAngular(() => {
       if (changes['floorplan'] && this.floorplan) {
-        this.viewer!.load(this.floorplan);
+        viewer.load(this.floorplan);
       }
 
       if (changes['statuses'] && this.statuses) {
-        this.viewer!.setStatuses(this.statuses);
+        viewer.setStatuses(this.statuses);
       }
 
       if (changes['maxSelectable']) {
-        this.viewer!.setMaxSelectable(this.maxSelectable);
+        viewer.setMaxSelectable(this.maxSelectable);
       }
     });
   }

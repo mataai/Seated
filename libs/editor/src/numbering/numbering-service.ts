@@ -40,27 +40,32 @@ export class NumberingService {
    * Creates a new unique seat ID.
    */
   public static nextSeatId(): string {
-    return 'seat_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36);
+    const randomPart = Math.random().toString(36).substring(2, 9);
+    const timePart = Date.now().toString(36);
+    return `seat_${randomPart}_${timePart}`;
   }
 
   /**
    * Creates a new unique row ID.
    */
   public static nextRowId(): string {
-    return 'row_' + Math.random().toString(36).substring(2, 9);
+    const randomPart = Math.random().toString(36).substring(2, 9);
+    return `row_${randomPart}`;
   }
 
   /**
    * Creates a new unique building ID.
    */
   public static nextBuildingId(): string {
-    return 'bld_' + Math.random().toString(36).substring(2, 9);
+    const randomPart = Math.random().toString(36).substring(2, 9);
+    return `bld_${randomPart}`;
   }
 
   /**
    * Creates a new unique zone ID.
    */
   public static nextZoneId(): string {
-    return 'zone_' + Math.random().toString(36).substring(2, 9);
+    const randomPart = Math.random().toString(36).substring(2, 9);
+    return `zone_${randomPart}`;
   }
 }

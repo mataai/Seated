@@ -1,15 +1,16 @@
-import {
+import type {
   AfterViewInit,
-  Component,
   ElementRef,
+  OnChanges,
+  OnDestroy,
+  SimpleChanges} from '@angular/core';
+import {
+  Component,
   EventEmitter,
   HostListener,
   Input,
   NgZone,
-  OnChanges,
-  OnDestroy,
   Output,
-  SimpleChanges,
   ViewChild,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -295,30 +296,38 @@ export class SeatsEditorComponent
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.editor) return;
+    const editor = this.editor;
+    if (!editor) return;
 
     this.ngZone.runOutsideAngular(() => {
       if (changes['floorplan'] && this.floorplan) {
         if (this.floorplan !== this.lastEmittedPlan) {
-          const current = this.editor!.getFloorplan();
+          const current = editor.getFloorplan();
           if (JSON.stringify(current) !== JSON.stringify(this.floorplan)) {
-            this.editor!.loadFloorplan(this.floorplan);
+            editor.loadFloorplan(this.floorplan);
           }
         }
       }
 
       if (changes['tool'] && this.tool) {
         this.currentTool = this.tool;
-        this.editor!.setTool(this.tool);
+        editor.setTool(this.tool);
       }
     });
   }
 
   @HostListener('window:keydown', ['$event'])
   public handleKeyDown(e: KeyboardEvent): void {
+    if (e.defaultPrevented) return;
+
     const target = e.target as HTMLElement | null;
     const tagName = target?.tagName?.toLowerCase();
-    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+    if (
+      tagName === 'input' ||
+      tagName === 'textarea' ||
+      tagName === 'select' ||
+      target?.isContentEditable
+    ) {
       return;
     }
 

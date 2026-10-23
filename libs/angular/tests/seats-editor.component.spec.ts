@@ -1,5 +1,6 @@
 import './test-setup';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { ComponentFixture} from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { SeatsEditorComponent } from '../src/components/seats-editor.component';
 import { SAMPLE_FLOORPLAN } from '@open-seats/core';
 

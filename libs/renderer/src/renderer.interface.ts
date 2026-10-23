@@ -36,8 +36,8 @@ export interface RendererOptions {
   draggableNodes?: boolean;
   onNodeClick?: (nodeId: string, nodeType: 'row' | 'zone' | 'building', evt: MouseEvent | TouchEvent) => void;
   onNodeDragStart?: (nodeId: string, nodeType: 'row' | 'zone' | 'building') => void;
-  onNodeDragMove?: (nodeId: string, nodeType: 'row' | 'zone' | 'building', pos: { x: number; y: number }) => void;
-  onNodeDragEnd?: (nodeId: string, nodeType: 'row' | 'zone' | 'building', pos: { x: number; y: number }, evt: MouseEvent | TouchEvent) => void;
+  onNodeDragMove?: (nodeId: string, nodeType: 'row' | 'zone' | 'building', pos: Vec2) => void;
+  onNodeDragEnd?: (nodeId: string, nodeType: 'row' | 'zone' | 'building', pos: Vec2, evt: MouseEvent | TouchEvent) => void;
   onSeatClick?: (ctx: RenderSeatContext, evt: MouseEvent | TouchEvent) => void;
   onSeatHover?: (ctx: RenderSeatContext, evt: MouseEvent) => void;
   onSeatHoverEnd?: (ctx: RenderSeatContext, evt: MouseEvent) => void;
@@ -72,7 +72,7 @@ export interface Renderer {
   resetZoom(): void;
   panTo(x: number, y: number): void;
   panBy(dx: number, dy: number): void;
-  getPosition(): { x: number; y: number };
+  getPosition(): Vec2;
   getHoveredSeatId(): string | null;
   getScale(): number;
   destroy(): void;

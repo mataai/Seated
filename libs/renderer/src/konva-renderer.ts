@@ -6,7 +6,6 @@ import {
   type Building,
   type Floorplan,
   type Row,
-  type Seat,
   type Vec2,
   type Zone,
 } from '@open-seats/core';
@@ -18,13 +17,13 @@ import type {
   SelectedStyle,
 } from './renderer.interface';
 
-const DEFAULT_SELECTED_STYLE: SelectedStyle = {
+const DEFAULT_SELECTED_STYLE: Required<SelectedStyle> = {
   fill: '#2196f3',
   stroke: '#ffffff',
   strokeWidth: 2,
 };
 
-const DEFAULT_HOVER_STYLE: HoverStyle = {
+const DEFAULT_HOVER_STYLE: Required<HoverStyle> = {
   stroke: '#ffffff',
   strokeWidth: 2,
 };
@@ -54,16 +53,12 @@ export class KonvaRenderer implements Renderer {
   private selectedNodeIds = new Set<string>();
   private draggableNodes = false;
 
-  private draftRect?: Konva.Rect;
-  private draftCorners?: [Konva.Circle, Konva.Circle];
-  private draftBadge?: Konva.Text;
-
   private options: RendererOptions;
   private resizeObserver?: ResizeObserver;
 
   // Touch pinch zoom state
   private lastTouchDist = 0;
-  private lastTouchCenter = { x: 0, y: 0 };
+  private lastTouchCenter: Vec2 = { x: 0, y: 0 };
 
   constructor(options: RendererOptions) {
     this.options = options;
@@ -267,6 +262,79 @@ export class KonvaRenderer implements Renderer {
     };
   }
 
+  private flattenPoints(points: Vec2[]): number[] {
+    const flat: number[] = new Array(points.length * 2);
+    let idx = 0;
+    for (let i = 0; i < points.length; i++) {
+      flat[idx++] = points[i].x;
+      flat[idx++] = points[i].y;
+    }
+    return flat;
+  }
+
+  private bindNodeDrag(
+    group: Konva.Group,
+    nodeId: string,
+    nodeType: 'building' | 'zone' | 'row'
+  ): void {
+    group.on('dragstart', (e) => {
+      e.cancelBubble = true;
+      this.stage.draggable(false);
+      this.options.onNodeDragStart?.(nodeId, nodeType);
+    });
+
+    group.on('dragmove', (e) => {
+      e.cancelBubble = true;
+      this.options.onNodeDragMove?.(nodeId, nodeType, group.position());
+    });
+
+    group.on('dragend', (e) => {
+      e.cancelBubble = true;
+      this.stage.draggable(true);
+      this.options.onNodeDragEnd?.(
+        nodeId,
+        nodeType,
+        group.position(),
+        e.evt as MouseEvent
+      );
+    });
+  }
+
+  private bindNodeInteractions(
+    target: Konva.Node,
+    group: Konva.Group,
+    nodeId: string,
+    nodeType: 'building' | 'zone' | 'row'
+  ): void {
+    target.on('mouseenter', () => {
+      if (this.draggableNodes) {
+        this.stage.container().style.cursor = this.selectedNodeIds.has(nodeId)
+          ? 'move'
+          : 'pointer';
+      }
+    });
+
+    target.on('mouseleave', () => {
+      if (this.draggableNodes) {
+        this.stage.container().style.cursor = 'default';
+      }
+    });
+
+    target.on('pointerdown', (e) => {
+      if (this.draggableNodes) {
+        e.cancelBubble = true;
+        if (!this.selectedNodeIds.has(nodeId)) {
+          this.options.onNodeClick?.(nodeId, nodeType, e.evt as MouseEvent);
+          group.draggable(true);
+        }
+      }
+    });
+
+    target.on('click tap', (e) => {
+      this.options.onNodeClick?.(nodeId, nodeType, e.evt as MouseEvent);
+    });
+  }
+
   private renderScene(floorplan: Floorplan): void {
     for (const building of floorplan.buildings) {
       const isBuildingSelected = this.selectedNodeIds.has(building.id);
@@ -278,37 +346,10 @@ export class KonvaRenderer implements Renderer {
         draggable: this.draggableNodes && isBuildingSelected,
       });
       this.buildingGroups.set(building.id, bGroup);
-
-      bGroup.on('dragstart', (e) => {
-        e.cancelBubble = true;
-        this.stage.draggable(false);
-        this.options.onNodeDragStart?.(building.id, 'building');
-      });
-
-      bGroup.on('dragmove', (e) => {
-        e.cancelBubble = true;
-        this.options.onNodeDragMove?.(building.id, 'building', bGroup.position());
-      });
-
-      bGroup.on('dragend', (e) => {
-        e.cancelBubble = true;
-        this.stage.draggable(true);
-        this.options.onNodeDragEnd?.(
-          building.id,
-          'building',
-          bGroup.position(),
-          e.evt as MouseEvent
-        );
-      });
-
-      // Building boundary polygon
-      const bPointsFlattened: number[] = [];
-      for (const pt of building.points) {
-        bPointsFlattened.push(pt.x, pt.y);
-      }
+      this.bindNodeDrag(bGroup, building.id, 'building');
 
       const bLine = new Konva.Line({
-        points: bPointsFlattened,
+        points: this.flattenPoints(building.points),
         closed: true,
         stroke: isBuildingSelected ? '#3b82f6' : '#4a4a4a',
         strokeWidth: isBuildingSelected ? 3 : 2,
@@ -318,32 +359,7 @@ export class KonvaRenderer implements Renderer {
         listening: true,
       });
 
-      bLine.on('mouseenter', () => {
-        if (this.draggableNodes) {
-          this.stage.container().style.cursor = this.selectedNodeIds.has(building.id)
-            ? 'move'
-            : 'pointer';
-        }
-      });
-
-      bLine.on('mouseleave', () => {
-        if (this.draggableNodes) {
-          this.stage.container().style.cursor = 'default';
-        }
-      });
-
-      bLine.on('pointerdown', (e) => {
-        if (this.draggableNodes) {
-          if (!this.selectedNodeIds.has(building.id)) {
-            this.options.onNodeClick?.(building.id, 'building', e.evt as MouseEvent);
-            bGroup.draggable(true);
-          }
-        }
-      });
-
-      bLine.on('click tap', (e) => {
-        this.options.onNodeClick?.(building.id, 'building', e.evt as MouseEvent);
-      });
+      this.bindNodeInteractions(bLine, bGroup, building.id, 'building');
 
       this.buildingLines.set(building.id, bLine);
       bGroup.add(bLine);
@@ -372,71 +388,33 @@ export class KonvaRenderer implements Renderer {
       draggable: this.draggableNodes && isZoneSelected,
     });
     this.zoneGroups.set(zone.id, zGroup);
+    this.bindNodeDrag(zGroup, zone.id, 'zone');
 
-    zGroup.on('dragstart', (e) => {
-      e.cancelBubble = true;
-      this.stage.draggable(false);
-      this.options.onNodeDragStart?.(zone.id, 'zone');
-    });
+    let strokeColor = 'transparent';
+    if (isZoneSelected) {
+      strokeColor = '#3b82f6';
+    } else if (zone.stroke) {
+      strokeColor = zone.stroke;
+    }
 
-    zGroup.on('dragmove', (e) => {
-      e.cancelBubble = true;
-      this.options.onNodeDragMove?.(zone.id, 'zone', zGroup.position());
-    });
-
-    zGroup.on('dragend', (e) => {
-      e.cancelBubble = true;
-      this.stage.draggable(true);
-      this.options.onNodeDragEnd?.(
-        zone.id,
-        'zone',
-        zGroup.position(),
-        e.evt as MouseEvent
-      );
-    });
-
-    const flattened: number[] = [];
-    for (const pt of zone.points) {
-      flattened.push(pt.x, pt.y);
+    let strokeWidth = 0;
+    if (isZoneSelected) {
+      strokeWidth = 3;
+    } else if (zone.stroke) {
+      strokeWidth = 1;
     }
 
     const zLine = new Konva.Line({
-      points: flattened,
+      points: this.flattenPoints(zone.points),
       closed: true,
       fill: zone.fill,
-      stroke: isZoneSelected ? '#3b82f6' : (zone.stroke ?? 'transparent'),
-      strokeWidth: isZoneSelected ? 3 : (zone.stroke ? 1 : 0),
+      stroke: strokeColor,
+      strokeWidth,
       opacity: zone.opacity ?? 1,
       listening: true,
     });
 
-    zLine.on('mouseenter', () => {
-      if (this.draggableNodes) {
-        this.stage.container().style.cursor = this.selectedNodeIds.has(zone.id)
-          ? 'move'
-          : 'pointer';
-      }
-    });
-
-    zLine.on('mouseleave', () => {
-      if (this.draggableNodes) {
-        this.stage.container().style.cursor = 'default';
-      }
-    });
-
-    zLine.on('pointerdown', (e) => {
-      if (this.draggableNodes) {
-        e.cancelBubble = true;
-        if (!this.selectedNodeIds.has(zone.id)) {
-          this.options.onNodeClick?.(zone.id, 'zone', e.evt as MouseEvent);
-          zGroup.draggable(true);
-        }
-      }
-    });
-
-    zLine.on('click tap', (e) => {
-      this.options.onNodeClick?.(zone.id, 'zone', e.evt as MouseEvent);
-    });
+    this.bindNodeInteractions(zLine, zGroup, zone.id, 'zone');
 
     this.zoneLines.set(zone.id, zLine);
     zGroup.add(zLine);
@@ -480,49 +458,13 @@ export class KonvaRenderer implements Renderer {
     });
     this.rowGroups.set(row.id, rGroup);
     this.rowModels.set(row.id, row);
-
-    rGroup.on('dragstart', (e) => {
-      e.cancelBubble = true;
-      this.stage.draggable(false);
-      this.options.onNodeDragStart?.(row.id, 'row');
-    });
-
-    rGroup.on('dragmove', (e) => {
-      e.cancelBubble = true;
-      this.options.onNodeDragMove?.(row.id, 'row', rGroup.position());
-    });
-
-    rGroup.on('dragend', (e) => {
-      e.cancelBubble = true;
-      this.stage.draggable(true);
-      this.options.onNodeDragEnd?.(
-        row.id,
-        'row',
-        rGroup.position(),
-        e.evt as MouseEvent
-      );
-    });
-
-    rGroup.on('pointerdown', (e) => {
-      if (this.draggableNodes) {
-        e.cancelBubble = true;
-        if (!this.selectedNodeIds.has(row.id)) {
-          this.options.onNodeClick?.(row.id, 'row', e.evt as MouseEvent);
-          rGroup.draggable(true);
-        }
-      }
-    });
-
-    rGroup.on('click tap', (e) => {
-      this.options.onNodeClick?.(row.id, 'row', e.evt as MouseEvent);
-    });
+    this.bindNodeDrag(rGroup, row.id, 'row');
+    this.bindNodeInteractions(rGroup, rGroup, row.id, 'row');
 
     let maxIndex = 0;
-    if (row.seats && row.seats.length > 0) {
-      for (const seat of row.seats) {
-        if (seat.index > maxIndex) {
-          maxIndex = seat.index;
-        }
+    for (const seat of row.seats ?? []) {
+      if (seat.index > maxIndex) {
+        maxIndex = seat.index;
       }
     }
 
@@ -532,36 +474,41 @@ export class KonvaRenderer implements Renderer {
     const bodyHeight = hasTable ? row.tableWidth : row.seatRadius * 2 + 10;
     const yOffset = hasTable ? -row.tableWidth / 2 : -bodyHeight / 2;
 
+    let tableFill = 'transparent';
+    if (hasTable) {
+      tableFill = row.tableStyle?.fill ?? '#2c2c2c';
+    } else if (isRowSelected) {
+      tableFill = 'rgba(59, 130, 246, 0.08)';
+    }
+
+    let tableStroke = 'transparent';
+    if (isRowSelected) {
+      tableStroke = '#3b82f6';
+    } else if (hasTable) {
+      tableStroke = row.tableStyle?.stroke ?? '#444444';
+    }
+
+    let tableStrokeWidth = 0;
+    if (isRowSelected) {
+      tableStrokeWidth = 2.5;
+    } else if (hasTable) {
+      tableStrokeWidth = row.tableStyle?.strokeWidth ?? 1;
+    }
+
     const tableRect = new Konva.Rect({
       x: -row.seatRadius - (hasTable ? 0 : 4),
       y: yOffset,
       width: bodyWidth + (hasTable ? 0 : 8),
       height: bodyHeight,
-      fill: hasTable
-        ? (row.tableStyle?.fill ?? '#2c2c2c')
-        : (isRowSelected ? 'rgba(59, 130, 246, 0.08)' : 'transparent'),
-      stroke: isRowSelected
-        ? '#3b82f6'
-        : (hasTable ? (row.tableStyle?.stroke ?? '#444444') : 'transparent'),
-      strokeWidth: isRowSelected ? 2.5 : (hasTable ? (row.tableStyle?.strokeWidth ?? 1) : 0),
+      fill: tableFill,
+      stroke: tableStroke,
+      strokeWidth: tableStrokeWidth,
       dash: hasTable ? [] : [5, 4],
       cornerRadius: row.tableStyle?.cornerRadius ?? 4,
       listening: true,
     });
 
-    tableRect.on('mouseenter', () => {
-      if (this.draggableNodes) {
-        this.stage.container().style.cursor = this.selectedNodeIds.has(row.id)
-          ? 'move'
-          : 'pointer';
-      }
-    });
-
-    tableRect.on('mouseleave', () => {
-      if (this.draggableNodes) {
-        this.stage.container().style.cursor = 'default';
-      }
-    });
+    this.bindNodeInteractions(tableRect, rGroup, row.id, 'row');
 
     this.rowRects.set(row.id, tableRect);
     rGroup.add(tableRect);
@@ -643,9 +590,9 @@ export class KonvaRenderer implements Renderer {
     const hovStyle = this.options.hoverStyle ?? DEFAULT_HOVER_STYLE;
 
     if (isSelected) {
-      circle.fill(selStyle.fill ?? DEFAULT_SELECTED_STYLE.fill!);
-      circle.stroke(selStyle.stroke ?? DEFAULT_SELECTED_STYLE.stroke!);
-      circle.strokeWidth(selStyle.strokeWidth ?? DEFAULT_SELECTED_STYLE.strokeWidth!);
+      circle.fill(selStyle.fill ?? DEFAULT_SELECTED_STYLE.fill);
+      circle.stroke(selStyle.stroke ?? DEFAULT_SELECTED_STYLE.stroke);
+      circle.strokeWidth(selStyle.strokeWidth ?? DEFAULT_SELECTED_STYLE.strokeWidth);
       circle.opacity(1);
     } else {
       circle.fill(statusDef.style.fill);
@@ -655,8 +602,8 @@ export class KonvaRenderer implements Renderer {
     }
 
     if (isHovered && !isSelected) {
-      circle.stroke(hovStyle.stroke ?? DEFAULT_HOVER_STYLE.stroke!);
-      circle.strokeWidth(hovStyle.strokeWidth ?? DEFAULT_HOVER_STYLE.strokeWidth!);
+      circle.stroke(hovStyle.stroke ?? DEFAULT_HOVER_STYLE.stroke);
+      circle.strokeWidth(hovStyle.strokeWidth ?? DEFAULT_HOVER_STYLE.strokeWidth);
     }
   }
 
@@ -768,13 +715,24 @@ export class KonvaRenderer implements Renderer {
       const isSel = this.selectedNodeIds.has(id);
       const row = this.rowModels.get(id);
       const hasTable = !!row && row.tableWidth > 0;
-      rect.stroke(isSel ? '#3b82f6' : (hasTable ? (row?.tableStyle?.stroke ?? '#444444') : 'transparent'));
-      rect.strokeWidth(isSel ? 2.5 : (hasTable ? (row?.tableStyle?.strokeWidth ?? 1) : 0));
-      rect.fill(
-        hasTable
-          ? (row?.tableStyle?.fill ?? '#2c2c2c')
-          : (isSel ? 'rgba(59, 130, 246, 0.08)' : 'transparent')
-      );
+
+      let stroke = 'transparent';
+      let strokeWidth = 0;
+      let fill = isSel ? 'rgba(59, 130, 246, 0.08)' : 'transparent';
+
+      if (isSel) {
+        stroke = '#3b82f6';
+        strokeWidth = 2.5;
+      } else if (hasTable) {
+        stroke = row?.tableStyle?.stroke ?? '#444444';
+        strokeWidth = row?.tableStyle?.strokeWidth ?? 1;
+        fill = row?.tableStyle?.fill ?? '#2c2c2c';
+      }
+
+      rect.stroke(stroke);
+      rect.strokeWidth(strokeWidth);
+      rect.fill(fill);
+
       const group = this.rowGroups.get(id);
       if (group) {
         group.draggable(this.draggableNodes && isSel);
@@ -845,7 +803,7 @@ export class KonvaRenderer implements Renderer {
     this.stage.batchDraw();
   }
 
-  public getPosition(): { x: number; y: number } {
+  public getPosition(): Vec2 {
     return this.stage.position();
   }
 
@@ -900,12 +858,8 @@ export class KonvaRenderer implements Renderer {
 
     // 1. Translucent fill preview if >= 3 points
     if (allPts.length >= 3) {
-      const flatFillPts: number[] = [];
-      for (const pt of allPts) {
-        flatFillPts.push(pt.x, pt.y);
-      }
       const fillPoly = new Konva.Line({
-        points: flatFillPts,
+        points: this.flattenPoints(allPts),
         closed: true,
         fill: isClosing ? 'rgba(16, 185, 129, 0.22)' : 'rgba(99, 102, 241, 0.12)',
         listening: false,
@@ -915,12 +869,8 @@ export class KonvaRenderer implements Renderer {
 
     // 2. Solid edges between confirmed points
     if (points.length >= 2) {
-      const flatConfirmedPts: number[] = [];
-      for (const pt of points) {
-        flatConfirmedPts.push(pt.x, pt.y);
-      }
       const confirmedLine = new Konva.Line({
-        points: flatConfirmedPts,
+        points: this.flattenPoints(points),
         stroke: '#4f46e5',
         strokeWidth: 2.5 / scale,
         lineCap: 'round',
@@ -1034,12 +984,23 @@ export class KonvaRenderer implements Renderer {
       { x: currentCorner.x, y: currentCorner.y, isStart: false },
     ];
     for (const c of corners) {
+      let cornerFill = '#ffffff';
+      let cornerStroke = '#4f46e5';
+
+      if (isInvalid) {
+        cornerFill = '#ef4444';
+        cornerStroke = '#ffffff';
+      } else if (c.isStart) {
+        cornerFill = '#10b981';
+        cornerStroke = '#ffffff';
+      }
+
       const circle = new Konva.Circle({
         x: c.x,
         y: c.y,
         radius: (c.isStart ? 6 : 5) / scale,
-        fill: isInvalid ? '#ef4444' : (c.isStart ? '#10b981' : '#ffffff'),
-        stroke: isInvalid ? '#ffffff' : (c.isStart ? '#ffffff' : '#4f46e5'),
+        fill: cornerFill,
+        stroke: cornerStroke,
         strokeWidth: 2 / scale,
         shadowColor: '#000000',
         shadowBlur: 3,

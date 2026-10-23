@@ -15,6 +15,7 @@ import {
   type Floorplan,
   type Violation,
 } from '@open-seats/core';
+import type { ToolType } from '@open-seats/editor';
 import type { RenderSeatContext } from '@open-seats/viewer';
 
 @Component({
@@ -31,11 +32,11 @@ export class AppComponent {
   @ViewChild(SeatsViewerComponent) viewerComp?: SeatsViewerComponent;
   @ViewChild(SeatsEditorComponent) editorComp?: SeatsEditorComponent;
 
-  public floorplan: Floorplan = JSON.parse(JSON.stringify(SAMPLE_FLOORPLAN));
+  public floorplan: Floorplan = structuredClone(SAMPLE_FLOORPLAN);
   public mode: 'viewer' | 'editor' = 'viewer';
-  public currentTool: import('@open-seats/editor').ToolType = 'select';
+  public currentTool: ToolType = 'select';
 
-  public setTool(tool: import('@open-seats/editor').ToolType): void {
+  public setTool(tool: ToolType): void {
     this.currentTool = tool;
     this.editorComp?.setTool(tool);
     this.cdr.markForCheck();

@@ -131,6 +131,8 @@ export function parseFloorplan(input: unknown): IFloorplan {
   return FloorplanSchema.parse(input) as IFloorplan;
 }
 
-export function safeParseFloorplan(input: unknown) {
+export function safeParseFloorplan(
+  input: unknown
+): ReturnType<typeof FloorplanSchema.safeParse> {
   return FloorplanSchema.safeParse(input);
 }

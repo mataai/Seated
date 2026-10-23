@@ -1,8 +1,5 @@
 import type {
-  Building,
   Floorplan,
-  Row,
-  Seat,
   SeatStatusDefinition,
   Violation,
 } from '@open-seats/core';

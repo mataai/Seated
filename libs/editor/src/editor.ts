@@ -3,7 +3,6 @@ import {
   canPlace,
   flipPolygon,
   inverseTransformPoint,
-  normalizeWinding,
   polygonBoundingBox,
   polygonCentroid,
   polygonsOverlap,
@@ -17,12 +16,12 @@ import {
   type Row,
   type Seat,
   type Vec2,
-  type Violation,
   type Zone,
 } from '@open-seats/core';
 import { createRenderer, type Renderer } from '@open-seats/renderer';
 import { createViewer, type ViewerInstance } from '@open-seats/viewer';
-import { Command, CommandStack } from './history/command-stack';
+import type { Command} from './history/command-stack';
+import { CommandStack } from './history/command-stack';
 import { NumberingService } from './numbering/numbering-service';
 import type {
   BuildingCreationMode,
@@ -73,7 +72,7 @@ export class Editor implements EditorInstance {
     };
 
     this.floorplan = options.floorplan
-      ? JSON.parse(JSON.stringify(options.floorplan))
+      ? structuredClone(options.floorplan)
       : {
           schemaVersion: 1,
           dimensions: { width: 1200, height: 800 },
@@ -138,6 +137,18 @@ export class Editor implements EditorInstance {
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.defaultPrevented) return;
+
+    const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
+    const isTextInputActive =
+      activeEl &&
+      (activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.tagName === 'SELECT' ||
+        (activeEl as HTMLElement).isContentEditable);
+
+    if (isTextInputActive) return;
+
     const isCtrlOrCmd = e.ctrlKey || e.metaKey;
 
     if (isCtrlOrCmd && (e.key === 'z' || e.key === 'Z')) {
@@ -205,33 +216,22 @@ export class Editor implements EditorInstance {
 
     // Arrow keys: move/nudge selected items
     if (this.selectedNodeIds.length > 0) {
-      const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
-      const isInput =
-        activeEl &&
-        (activeEl.tagName === 'INPUT' ||
-          activeEl.tagName === 'TEXTAREA' ||
-          activeEl.tagName === 'SELECT' ||
-          (activeEl as HTMLElement).isContentEditable);
+      let dx = 0;
+      let dy = 0;
+      const defaultStep = e.shiftKey ? 10 : 2;
+      const step = this.grid.enabled ? this.grid.size : defaultStep;
 
-      if (!isInput) {
-        let dx = 0;
-        let dy = 0;
-        const step = e.shiftKey
-          ? (this.grid.enabled ? this.grid.size : 10)
-          : (this.grid.enabled ? this.grid.size : 2);
+      if (e.key === 'ArrowUp') dy = -step;
+      else if (e.key === 'ArrowDown') dy = step;
+      else if (e.key === 'ArrowLeft') dx = -step;
+      else if (e.key === 'ArrowRight') dx = step;
 
-        if (e.key === 'ArrowUp') dy = -step;
-        else if (e.key === 'ArrowDown') dy = step;
-        else if (e.key === 'ArrowLeft') dx = -step;
-        else if (e.key === 'ArrowRight') dx = step;
-
-        if (dx !== 0 || dy !== 0) {
-          e.preventDefault();
-          for (const id of this.selectedNodeIds) {
-            this.nudgeNode(id, dx, dy);
-          }
-          return;
+      if (dx !== 0 || dy !== 0) {
+        e.preventDefault();
+        for (const id of this.selectedNodeIds) {
+          this.nudgeNode(id, dx, dy);
         }
+        return;
       }
     }
   };
@@ -263,14 +263,14 @@ export class Editor implements EditorInstance {
     if (this.isDrawingBuilding) {
       this.cancelBuildingCreation();
     }
-    this.floorplan = JSON.parse(JSON.stringify(floorplan));
+    this.floorplan = structuredClone(floorplan);
     this.commandStack.clear();
     this.selectedNodeIds = [];
     this.emitChange();
   }
 
   public getFloorplan(): Floorplan {
-    return JSON.parse(JSON.stringify(this.floorplan));
+    return structuredClone(this.floorplan);
   }
 
   public setTool(tool: ToolType): void {
@@ -1063,7 +1063,6 @@ export class Editor implements EditorInstance {
         return true;
       }
     }
-    console.log('no move');
     return false;
   }
 
@@ -1170,6 +1169,9 @@ export class Editor implements EditorInstance {
       return false;
     }
 
+    const srcBuilding = sourceBuilding;
+    const movingRow = row;
+
     const targetBuilding = this.floorplan.buildings.find(
       (b) => b.id === targetBuildingId
     );
@@ -1179,9 +1181,9 @@ export class Editor implements EditorInstance {
     const worldPos =
       dropWorldPosition ??
       transformPoint(
-        row.position,
-        sourceBuilding.position,
-        sourceBuilding.rotation
+        movingRow.position,
+        srcBuilding.position,
+        srcBuilding.rotation
       );
     const newLocalPos = inverseTransformPoint(
       worldPos,
@@ -1189,10 +1191,10 @@ export class Editor implements EditorInstance {
       targetBuilding.rotation
     );
     const newLocalRot =
-      row.rotation + sourceBuilding.rotation - targetBuilding.rotation;
+      movingRow.rotation + srcBuilding.rotation - targetBuilding.rotation;
 
     const proposedRow: Row = {
-      ...row,
+      ...movingRow,
       position: this.snap(newLocalPos),
       rotation: newLocalRot,
     };
@@ -1202,13 +1204,13 @@ export class Editor implements EditorInstance {
       const testPlan: Floorplan = {
         ...this.floorplan,
         buildings: this.floorplan.buildings.map((b) => {
-          if (b.id === sourceBuilding!.id && b.id === targetBuildingId) {
+          if (b.id === srcBuilding.id && b.id === targetBuildingId) {
             return {
               ...b,
               rows: [...b.rows.filter((r) => r.id !== rowId), proposedRow],
             };
           }
-          if (b.id === sourceBuilding!.id) {
+          if (b.id === srcBuilding.id) {
             return {
               ...b,
               rows: b.rows.filter((r) => r.id !== rowId),
@@ -1235,24 +1237,24 @@ export class Editor implements EditorInstance {
       }
     }
 
-    const oldPos = row.position;
-    const oldRot = row.rotation;
+    const oldPos = movingRow.position;
+    const oldRot = movingRow.rotation;
 
     const command: Command = {
-      name: `Reparent Row ${row.label} to ${targetBuilding.label}`,
+      name: `Reparent Row ${movingRow.label} to ${targetBuilding.label}`,
       execute: () => {
-        sourceBuilding!.rows = sourceBuilding!.rows.filter(
+        srcBuilding.rows = srcBuilding.rows.filter(
           (r) => r.id !== rowId
         );
-        row!.position = proposedRow.position;
-        row!.rotation = proposedRow.rotation;
-        targetBuilding.rows.push(row!);
+        movingRow.position = proposedRow.position;
+        movingRow.rotation = proposedRow.rotation;
+        targetBuilding.rows.push(movingRow);
       },
       undo: () => {
         targetBuilding.rows = targetBuilding.rows.filter((r) => r.id !== rowId);
-        row!.position = oldPos;
-        row!.rotation = oldRot;
-        sourceBuilding!.rows.push(row!);
+        movingRow.position = oldPos;
+        movingRow.rotation = oldRot;
+        srcBuilding.rows.push(movingRow);
       },
     };
 
@@ -1390,15 +1392,18 @@ export class Editor implements EditorInstance {
     const oldSourceSeats = [...sourceRow.seats];
     const oldTargetSeats = [...targetRow.seats];
 
+    const srcRow = sourceRow;
+    const dstRow = targetRow;
+
     this.commandStack.execute({
-      name: `Move Seat ${movedSeat.label} to Row ${targetRow.label}`,
+      name: `Move Seat ${movedSeat.label} to Row ${dstRow.label}`,
       execute: () => {
-        sourceRow!.seats = proposedSourceSeats;
-        targetRow!.seats = proposedTargetSeats;
+        srcRow.seats = proposedSourceSeats;
+        dstRow.seats = proposedTargetSeats;
       },
       undo: () => {
-        sourceRow!.seats = oldSourceSeats;
-        targetRow!.seats = oldTargetSeats;
+        srcRow.seats = oldSourceSeats;
+        dstRow.seats = oldTargetSeats;
       },
     });
 
@@ -1439,18 +1444,19 @@ export class Editor implements EditorInstance {
       if (violations.length > 0) return false;
     }
 
-    const oldSide = targetRow.side;
-    const oldSeats = [...targetRow.seats];
+    const row = targetRow;
+    const oldSide = row.side;
+    const oldSeats = [...row.seats];
 
     this.commandStack.execute({
-      name: `Set Row ${targetRow.label} side to ${side}`,
+      name: `Set Row ${row.label} side to ${side}`,
       execute: () => {
-        targetRow!.side = side;
-        targetRow!.seats = renumbered;
+        row.side = side;
+        row.seats = renumbered;
       },
       undo: () => {
-        targetRow!.side = oldSide;
-        targetRow!.seats = oldSeats;
+        row.side = oldSide;
+        row.seats = oldSeats;
       },
     });
 
@@ -1479,14 +1485,15 @@ export class Editor implements EditorInstance {
       if (violations.length > 0) return false;
     }
 
-    const oldWidth = targetRow.tableWidth;
+    const row = targetRow;
+    const oldWidth = row.tableWidth;
     this.commandStack.execute({
-      name: `Set Row ${targetRow.label} table width`,
+      name: `Set Row ${row.label} table width`,
       execute: () => {
-        targetRow!.tableWidth = tableWidth;
+        row.tableWidth = tableWidth;
       },
       undo: () => {
-        targetRow!.tableWidth = oldWidth;
+        row.tableWidth = oldWidth;
       },
     });
 
@@ -1518,14 +1525,15 @@ export class Editor implements EditorInstance {
       }
     }
 
-    const oldSpacing = targetRow.seatSpacing;
+    const row = targetRow;
+    const oldSpacing = row.seatSpacing;
     this.commandStack.execute({
-      name: `Set Row ${targetRow.label} seat spacing`,
+      name: `Set Row ${row.label} seat spacing`,
       execute: () => {
-        targetRow!.seatSpacing = seatSpacing;
+        row.seatSpacing = seatSpacing;
       },
       undo: () => {
-        targetRow!.seatSpacing = oldSpacing;
+        row.seatSpacing = oldSpacing;
       },
     });
 
@@ -1555,14 +1563,15 @@ export class Editor implements EditorInstance {
       if (violations.length > 0) return false;
     }
 
-    const oldRadius = targetRow.seatRadius;
+    const row = targetRow;
+    const oldRadius = row.seatRadius;
     this.commandStack.execute({
-      name: `Set Row ${targetRow.label} seat radius`,
+      name: `Set Row ${row.label} seat radius`,
       execute: () => {
-        targetRow!.seatRadius = seatRadius;
+        row.seatRadius = seatRadius;
       },
       undo: () => {
-        targetRow!.seatRadius = oldRadius;
+        row.seatRadius = oldRadius;
       },
     });
 
@@ -1583,7 +1592,7 @@ export class Editor implements EditorInstance {
     if (!targetRow) return false;
     if (targetRow.seats.length === seatCount) return true;
 
-    const oldSeats = JSON.parse(JSON.stringify(targetRow.seats));
+    const oldSeats = [...targetRow.seats];
     const side = targetRow.side;
     let proposedSeats: Seat[] = [];
 
@@ -1661,13 +1670,14 @@ export class Editor implements EditorInstance {
       if (violations.length > 0) return false;
     }
 
+    const row = targetRow;
     this.commandStack.execute({
-      name: `Set Row ${targetRow.label} seat count to ${seatCount}`,
+      name: `Set Row ${row.label} seat count to ${seatCount}`,
       execute: () => {
-        targetRow!.seats = renumbered;
+        row.seats = renumbered;
       },
       undo: () => {
-        targetRow!.seats = oldSeats;
+        row.seats = oldSeats;
       },
     });
 
@@ -1685,7 +1695,7 @@ export class Editor implements EditorInstance {
     if (building) {
       this.clipboard = {
         type: 'building',
-        data: JSON.parse(JSON.stringify(building)),
+        data: structuredClone(building),
       };
       return true;
     }
@@ -1695,7 +1705,7 @@ export class Editor implements EditorInstance {
       if (zone) {
         this.clipboard = {
           type: 'zone',
-          data: JSON.parse(JSON.stringify(zone)),
+          data: structuredClone(zone),
         };
         return true;
       }
@@ -1703,7 +1713,7 @@ export class Editor implements EditorInstance {
       if (row) {
         this.clipboard = {
           type: 'row',
-          data: JSON.parse(JSON.stringify(row)),
+          data: structuredClone(row),
         };
         return true;
       }
@@ -1728,290 +1738,307 @@ export class Editor implements EditorInstance {
     return this.clipboard !== null;
   }
 
+  private resolveTargetBuilding(targetBuildingId?: string): Building | undefined {
+    if (targetBuildingId) {
+      const found = this.floorplan.buildings.find((b) => b.id === targetBuildingId);
+      if (found) return found;
+    }
+
+    if (this.selectedNodeIds.length > 0) {
+      const selId = this.selectedNodeIds[0];
+      const selectedBuilding = this.floorplan.buildings.find((b) => b.id === selId);
+      if (selectedBuilding) return selectedBuilding;
+
+      for (const building of this.floorplan.buildings) {
+        if (
+          building.zones.some((z) => z.id === selId) ||
+          building.rows.some((r) => r.id === selId)
+        ) {
+          return building;
+        }
+      }
+    }
+
+    return this.floorplan.buildings[0];
+  }
+
+  private pasteBuilding(original: Building, offset: Vec2): boolean {
+    const newId = NumberingService.nextBuildingId();
+    const bbox = polygonBoundingBox(original.points);
+    const bWidth = Math.round(bbox.width || 200);
+    const bHeight = Math.round(bbox.height || 200);
+
+    const newBuildingTemplate: Building = {
+      ...original,
+      id: newId,
+      label: `${original.label} Copy`,
+      position: { ...original.position },
+      points: original.points.map((p) => ({ ...p })),
+      zones: original.zones.map((z) => ({
+        ...z,
+        id: NumberingService.nextZoneId(),
+        points: z.points.map((p) => ({ ...p })),
+        position: { ...z.position },
+      })),
+      rows: original.rows.map((r) => {
+        const newRow: Row = {
+          ...r,
+          id: NumberingService.nextRowId(),
+          position: { ...r.position },
+          seats: r.seats.map((s) => ({
+            ...s,
+            id: NumberingService.nextSeatId(),
+          })),
+        };
+        newRow.seats = NumberingService.renumberRowSeats(newRow);
+        return newRow;
+      }),
+    };
+
+    const candidateOffsets: Vec2[] = [
+      offset,
+      { x: 0, y: 0 },
+      { x: bWidth + 40, y: 0 },
+      { x: 0, y: bHeight + 40 },
+      { x: -(bWidth + 40), y: 0 },
+      { x: 0, y: -(bHeight + 40) },
+      { x: bWidth + 40, y: bHeight + 40 },
+      { x: 40, y: 40 },
+      { x: 80, y: 80 },
+    ];
+
+    let placedBuilding: Building | null = null;
+    for (const cand of candidateOffsets) {
+      const newPos = this.snap({
+        x: original.position.x + cand.x,
+        y: original.position.y + cand.y,
+      });
+      const candidateBuilding: Building = { ...newBuildingTemplate, position: newPos };
+
+      if (!this.rules.enforce) {
+        placedBuilding = candidateBuilding;
+        break;
+      }
+
+      const testPlan: Floorplan = {
+        ...this.floorplan,
+        buildings: [...this.floorplan.buildings, candidateBuilding],
+      };
+      const violations = canPlace(
+        testPlan,
+        newId,
+        {},
+        { tolerance: this.rules.tolerance }
+      );
+      if (violations.length === 0) {
+        placedBuilding = candidateBuilding;
+        break;
+      }
+    }
+
+    if (!placedBuilding) return false;
+
+    const finalBuilding = placedBuilding;
+    this.commandStack.execute({
+      name: `Paste Building ${finalBuilding.label}`,
+      execute: () => {
+        this.floorplan.buildings.push(finalBuilding);
+      },
+      undo: () => {
+        const idx = this.floorplan.buildings.findIndex((b) => b.id === newId);
+        if (idx >= 0) this.floorplan.buildings.splice(idx, 1);
+      },
+    });
+    this.emitChange();
+    this.selectNodes([newId]);
+    return true;
+  }
+
+  private pasteZone(original: Zone, targetBuilding: Building, offset: Vec2): boolean {
+    const newId = NumberingService.nextZoneId();
+    const bbox = polygonBoundingBox(original.points);
+    const zWidth = Math.round(bbox.width || 120);
+    const zHeight = Math.round(bbox.height || 80);
+
+    const newZoneTemplate: Zone = {
+      ...original,
+      id: newId,
+      position: { ...original.position },
+      points: original.points.map((p) => ({ ...p })),
+    };
+
+    const candidateOffsets: Vec2[] = [
+      offset,
+      { x: 0, y: 0 },
+      { x: 0, y: zHeight + 20 },
+      { x: zWidth + 20, y: 0 },
+      { x: -(zWidth + 20), y: 0 },
+      { x: 0, y: -(zHeight + 20) },
+      { x: zWidth + 20, y: zHeight + 20 },
+      { x: 30, y: 30 },
+      { x: 60, y: 60 },
+    ];
+
+    let placedZone: Zone | null = null;
+    for (const cand of candidateOffsets) {
+      const newPos = this.snap({
+        x: original.position.x + cand.x,
+        y: original.position.y + cand.y,
+      });
+      const candidateZone: Zone = { ...newZoneTemplate, position: newPos };
+
+      if (!this.rules.enforce) {
+        placedZone = candidateZone;
+        break;
+      }
+
+      const testPlan: Floorplan = {
+        ...this.floorplan,
+        buildings: this.floorplan.buildings.map((b) =>
+          b.id === targetBuilding.id
+            ? { ...b, zones: [...(b.zones ?? []), candidateZone] }
+            : b
+        ),
+      };
+      const violations = canPlace(
+        testPlan,
+        newId,
+        {},
+        { tolerance: this.rules.tolerance }
+      );
+      if (violations.length === 0) {
+        placedZone = candidateZone;
+        break;
+      }
+    }
+
+    if (!placedZone) return false;
+
+    const finalZone = placedZone;
+    this.commandStack.execute({
+      name: `Paste Zone ${newId}`,
+      execute: () => {
+        targetBuilding.zones.push(finalZone);
+      },
+      undo: () => {
+        const idx = targetBuilding.zones.findIndex((z) => z.id === newId);
+        if (idx >= 0) targetBuilding.zones.splice(idx, 1);
+      },
+    });
+    this.emitChange();
+    this.selectNodes([newId]);
+    return true;
+  }
+
+  private pasteRow(original: Row, targetBuilding: Building, offset: Vec2): boolean {
+    const newId = NumberingService.nextRowId();
+    const nextLetter = NumberingService.rowLabel(targetBuilding.rows.length);
+
+    const clonedSeats = original.seats.map((s) => ({
+      ...s,
+      id: NumberingService.nextSeatId(),
+    }));
+
+    const newRowTemplate: Row = {
+      ...original,
+      id: newId,
+      label: nextLetter,
+      seats: clonedSeats,
+      position: { ...original.position },
+    };
+    newRowTemplate.seats = NumberingService.renumberRowSeats(newRowTemplate);
+
+    const rowHeight = (original.tableWidth ?? 28) + (original.seatRadius ?? 14) * 4;
+    const verticalStep = Math.max(70, Math.round(rowHeight + 10));
+
+    const existingRows = targetBuilding.rows ?? [];
+    const maxY =
+      existingRows.length > 0
+        ? Math.max(...existingRows.map((r) => r.position.y))
+        : original.position.y;
+    const minY =
+      existingRows.length > 0
+        ? Math.min(...existingRows.map((r) => r.position.y))
+        : original.position.y;
+
+    const candidatePositions: Vec2[] = [
+      { x: original.position.x, y: maxY + verticalStep },
+      { x: original.position.x + offset.x, y: original.position.y + offset.y },
+      { x: original.position.x, y: original.position.y },
+      { x: original.position.x, y: minY - verticalStep },
+      { x: original.position.x, y: original.position.y + verticalStep },
+      { x: original.position.x, y: original.position.y + verticalStep * 2 },
+      { x: original.position.x, y: original.position.y + verticalStep * 3 },
+      { x: original.position.x, y: original.position.y - verticalStep },
+      { x: original.position.x, y: original.position.y - verticalStep * 2 },
+      { x: original.position.x + 80, y: maxY + verticalStep },
+      { x: original.position.x - 80, y: maxY + verticalStep },
+    ];
+
+    let placedRow: Row | null = null;
+    for (const candPos of candidatePositions) {
+      const snappedPos = this.snap(candPos);
+      const candidateRow: Row = { ...newRowTemplate, position: snappedPos };
+
+      if (!this.rules.enforce) {
+        placedRow = candidateRow;
+        break;
+      }
+
+      const testPlan: Floorplan = {
+        ...this.floorplan,
+        buildings: this.floorplan.buildings.map((b) =>
+          b.id === targetBuilding.id
+            ? { ...b, rows: [...(b.rows ?? []), candidateRow] }
+            : b
+        ),
+      };
+      const violations = canPlace(
+        testPlan,
+        newId,
+        {},
+        { tolerance: this.rules.tolerance }
+      );
+      if (violations.length === 0) {
+        placedRow = candidateRow;
+        break;
+      }
+    }
+
+    if (!placedRow) return false;
+
+    const finalRow = placedRow;
+    this.commandStack.execute({
+      name: `Paste Row ${nextLetter}`,
+      execute: () => {
+        targetBuilding.rows.push(finalRow);
+      },
+      undo: () => {
+        const idx = targetBuilding.rows.findIndex((r) => r.id === newId);
+        if (idx >= 0) targetBuilding.rows.splice(idx, 1);
+      },
+    });
+    this.emitChange();
+    this.selectNodes([newId]);
+    return true;
+  }
+
   public paste(targetBuildingId?: string, offset: Vec2 = { x: 30, y: 30 }): boolean {
     if (!this.clipboard) return false;
 
     if (this.clipboard.type === 'building') {
-      const original = this.clipboard.data as Building;
-      const newId = NumberingService.nextBuildingId();
-      const bbox = polygonBoundingBox(original.points);
-      const bWidth = Math.round(bbox.width || 200);
-      const bHeight = Math.round(bbox.height || 200);
-
-      const newBuildingTemplate: Building = {
-        ...JSON.parse(JSON.stringify(original)),
-        id: newId,
-        label: `${original.label} Copy`,
-      };
-
-      for (const z of newBuildingTemplate.zones) {
-        z.id = NumberingService.nextZoneId();
-      }
-      for (const r of newBuildingTemplate.rows) {
-        r.id = NumberingService.nextRowId();
-        for (const s of r.seats) {
-          s.id = NumberingService.nextSeatId();
-        }
-      }
-
-      const candidateOffsets: Vec2[] = [
-        offset,
-        { x: 0, y: 0 },
-        { x: bWidth + 40, y: 0 },
-        { x: 0, y: bHeight + 40 },
-        { x: -(bWidth + 40), y: 0 },
-        { x: 0, y: -(bHeight + 40) },
-        { x: bWidth + 40, y: bHeight + 40 },
-        { x: 40, y: 40 },
-        { x: 80, y: 80 },
-      ];
-
-      let placedBuilding: Building | null = null;
-      for (const cand of candidateOffsets) {
-        const newPos = this.snap({
-          x: original.position.x + cand.x,
-          y: original.position.y + cand.y,
-        });
-        const candidateBuilding = { ...newBuildingTemplate, position: newPos };
-
-        if (!this.rules.enforce) {
-          placedBuilding = candidateBuilding;
-          break;
-        }
-
-        const testPlan: Floorplan = {
-          ...this.floorplan,
-          buildings: [...this.floorplan.buildings, candidateBuilding],
-        };
-        const violations = canPlace(
-          testPlan,
-          newId,
-          {},
-          { tolerance: this.rules.tolerance }
-        );
-        if (violations.length === 0) {
-          placedBuilding = candidateBuilding;
-          break;
-        }
-      }
-
-      if (!placedBuilding) return false;
-
-      const finalBuilding = placedBuilding;
-      this.commandStack.execute({
-        name: `Paste Building ${finalBuilding.label}`,
-        execute: () => {
-          this.floorplan.buildings.push(finalBuilding);
-        },
-        undo: () => {
-          const idx = this.floorplan.buildings.findIndex((b) => b.id === newId);
-          if (idx >= 0) this.floorplan.buildings.splice(idx, 1);
-        },
-      });
-      this.emitChange();
-      this.selectNodes([newId]);
-      return true;
+      return this.pasteBuilding(this.clipboard.data, offset);
     }
 
-    let targetBuilding: Building | undefined;
-    if (targetBuildingId) {
-      targetBuilding = this.floorplan.buildings.find(
-        (b) => b.id === targetBuildingId
-      );
-    }
-    if (!targetBuilding && this.selectedNodeIds.length > 0) {
-      const selId = this.selectedNodeIds[0];
-      targetBuilding = this.floorplan.buildings.find((b) => b.id === selId);
-      if (!targetBuilding) {
-        for (const b of this.floorplan.buildings) {
-          if (
-            b.zones.some((z) => z.id === selId) ||
-            b.rows.some((r) => r.id === selId)
-          ) {
-            targetBuilding = b;
-            break;
-          }
-        }
-      }
-    }
-    if (!targetBuilding) {
-      targetBuilding = this.floorplan.buildings[0];
-    }
+    const targetBuilding = this.resolveTargetBuilding(targetBuildingId);
     if (!targetBuilding) return false;
 
     if (this.clipboard.type === 'zone') {
-      const original = this.clipboard.data as Zone;
-      const newId = NumberingService.nextZoneId();
-      const bbox = polygonBoundingBox(original.points);
-      const zWidth = Math.round(bbox.width || 120);
-      const zHeight = Math.round(bbox.height || 80);
-
-      const newZoneTemplate: Zone = {
-        ...JSON.parse(JSON.stringify(original)),
-        id: newId,
-      };
-
-      const candidateOffsets: Vec2[] = [
-        offset,
-        { x: 0, y: 0 },
-        { x: 0, y: zHeight + 20 },
-        { x: zWidth + 20, y: 0 },
-        { x: -(zWidth + 20), y: 0 },
-        { x: 0, y: -(zHeight + 20) },
-        { x: zWidth + 20, y: zHeight + 20 },
-        { x: 30, y: 30 },
-        { x: 60, y: 60 },
-      ];
-
-      let placedZone: Zone | null = null;
-      for (const cand of candidateOffsets) {
-        const newPos = this.snap({
-          x: original.position.x + cand.x,
-          y: original.position.y + cand.y,
-        });
-        const candidateZone = { ...newZoneTemplate, position: newPos };
-
-        if (!this.rules.enforce) {
-          placedZone = candidateZone;
-          break;
-        }
-
-        const testPlan: Floorplan = {
-          ...this.floorplan,
-          buildings: this.floorplan.buildings.map((b) =>
-            b.id === targetBuilding!.id
-              ? { ...b, zones: [...(b.zones ?? []), candidateZone] }
-              : b
-          ),
-        };
-        const violations = canPlace(
-          testPlan,
-          newId,
-          {},
-          { tolerance: this.rules.tolerance }
-        );
-        if (violations.length === 0) {
-          placedZone = candidateZone;
-          break;
-        }
-      }
-
-      if (!placedZone) return false;
-
-      const finalZone = placedZone;
-      this.commandStack.execute({
-        name: `Paste Zone ${newId}`,
-        execute: () => {
-          targetBuilding!.zones.push(finalZone);
-        },
-        undo: () => {
-          const idx = targetBuilding!.zones.findIndex((z) => z.id === newId);
-          if (idx >= 0) targetBuilding!.zones.splice(idx, 1);
-        },
-      });
-      this.emitChange();
-      this.selectNodes([newId]);
-      return true;
+      return this.pasteZone(this.clipboard.data, targetBuilding, offset);
     }
 
     if (this.clipboard.type === 'row') {
-      const original = this.clipboard.data as Row;
-      const newId = NumberingService.nextRowId();
-      const nextLetter = NumberingService.rowLabel(targetBuilding.rows.length);
-
-      const clonedSeats = original.seats.map((s) => ({
-        ...s,
-        id: NumberingService.nextSeatId(),
-      }));
-
-      const newRowTemplate: Row = {
-        ...JSON.parse(JSON.stringify(original)),
-        id: newId,
-        label: nextLetter,
-        seats: clonedSeats,
-      };
-      newRowTemplate.seats = NumberingService.renumberRowSeats(newRowTemplate);
-
-      const rowHeight = (original.tableWidth ?? 28) + (original.seatRadius ?? 14) * 4;
-      const verticalStep = Math.max(70, Math.round(rowHeight + 10));
-
-      const existingRows = targetBuilding.rows ?? [];
-      const maxY =
-        existingRows.length > 0
-          ? Math.max(...existingRows.map((r) => r.position.y))
-          : original.position.y;
-      const minY =
-        existingRows.length > 0
-          ? Math.min(...existingRows.map((r) => r.position.y))
-          : original.position.y;
-
-      const candidatePositions: Vec2[] = [
-        // 1. Below the bottom-most row in the target building (ideal for sequential duplicates)
-        { x: original.position.x, y: maxY + verticalStep },
-        // 2. Preferred offset relative to original
-        { x: original.position.x + offset.x, y: original.position.y + offset.y },
-        // 3. Original position (crucial if cut was called)
-        { x: original.position.x, y: original.position.y },
-        // 4. Above the top-most row
-        { x: original.position.x, y: minY - verticalStep },
-        // 5. Subsequent slots downwards
-        { x: original.position.x, y: original.position.y + verticalStep },
-        { x: original.position.x, y: original.position.y + verticalStep * 2 },
-        { x: original.position.x, y: original.position.y + verticalStep * 3 },
-        // 6. Slots upwards
-        { x: original.position.x, y: original.position.y - verticalStep },
-        { x: original.position.x, y: original.position.y - verticalStep * 2 },
-        // 7. Slight horizontal shifts if Y is crowded
-        { x: original.position.x + 80, y: maxY + verticalStep },
-        { x: original.position.x - 80, y: maxY + verticalStep },
-      ];
-
-      let placedRow: Row | null = null;
-      for (const candPos of candidatePositions) {
-        const snappedPos = this.snap(candPos);
-        const candidateRow: Row = { ...newRowTemplate, position: snappedPos };
-
-        if (!this.rules.enforce) {
-          placedRow = candidateRow;
-          break;
-        }
-
-        const testPlan: Floorplan = {
-          ...this.floorplan,
-          buildings: this.floorplan.buildings.map((b) =>
-            b.id === targetBuilding!.id
-              ? { ...b, rows: [...(b.rows ?? []), candidateRow] }
-              : b
-          ),
-        };
-        const violations = canPlace(
-          testPlan,
-          newId,
-          {},
-          { tolerance: this.rules.tolerance }
-        );
-        if (violations.length === 0) {
-          placedRow = candidateRow;
-          break;
-        }
-      }
-
-      if (!placedRow) return false;
-
-      const finalRow = placedRow;
-      this.commandStack.execute({
-        name: `Paste Row ${nextLetter}`,
-        execute: () => {
-          targetBuilding!.rows.push(finalRow);
-        },
-        undo: () => {
-          const idx = targetBuilding!.rows.findIndex((r) => r.id === newId);
-          if (idx >= 0) targetBuilding!.rows.splice(idx, 1);
-        },
-      });
-      this.emitChange();
-      this.selectNodes([newId]);
-      return true;
+      return this.pasteRow(this.clipboard.data, targetBuilding, offset);
     }
 
     return false;
@@ -2031,9 +2058,9 @@ export class Editor implements EditorInstance {
   ): boolean {
     const building = this.floorplan.buildings.find((b) => b.id === nodeId);
     if (building) {
-      const oldPoints = JSON.parse(JSON.stringify(building.points));
-      const oldRows = JSON.parse(JSON.stringify(building.rows));
-      const oldZones = JSON.parse(JSON.stringify(building.zones));
+      const oldPoints = building.points.map((p) => ({ ...p }));
+      const oldRows = [...building.rows];
+      const oldZones = [...building.zones];
 
       const flippedPoints = flipPolygon(building.points, direction);
       const centroid = polygonCentroid(building.points);
@@ -2114,7 +2141,7 @@ export class Editor implements EditorInstance {
     for (const b of this.floorplan.buildings) {
       const zone = (b.zones ?? []).find((z) => z.id === nodeId);
       if (zone) {
-        const oldPoints = JSON.parse(JSON.stringify(zone.points));
+        const oldPoints = zone.points.map((p) => ({ ...p }));
         const flippedPoints = flipPolygon(zone.points, direction);
 
         if (this.rules.enforce) {
@@ -2215,7 +2242,7 @@ export class Editor implements EditorInstance {
           },
           undo: () => {
             if (oldText !== undefined) {
-              zone.text!.value = oldText;
+              zone.text = { value: oldText };
             } else {
               delete zone.text;
             }
@@ -2271,7 +2298,7 @@ export class Editor implements EditorInstance {
 
     const building = this.floorplan.buildings.find((b) => b.id === nodeId);
     if (building) {
-      const oldPoints = JSON.parse(JSON.stringify(building.points));
+      const oldPoints = building.points.map((p) => ({ ...p }));
       const scaled = scalePolygon(building.points, scaleX, scaleY);
 
       if (this.rules.enforce) {
@@ -2306,7 +2333,7 @@ export class Editor implements EditorInstance {
     for (const b of this.floorplan.buildings) {
       const zone = (b.zones ?? []).find((z) => z.id === nodeId);
       if (zone) {
-        const oldPoints = JSON.parse(JSON.stringify(zone.points));
+        const oldPoints = zone.points.map((p) => ({ ...p }));
         const scaled = scalePolygon(zone.points, scaleX, scaleY);
 
         if (this.rules.enforce) {

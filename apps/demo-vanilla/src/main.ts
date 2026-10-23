@@ -5,7 +5,7 @@ import {
 import { createViewer, type ViewerInstance } from '@open-seats/viewer';
 import { createEditor, type EditorInstance, type ToolType } from '@open-seats/editor';
 
-let currentFloorplan: Floorplan = JSON.parse(JSON.stringify(SAMPLE_FLOORPLAN));
+let currentFloorplan: Floorplan = structuredClone(SAMPLE_FLOORPLAN);
 let currentMode: 'viewer' | 'editor' = 'viewer';
 
 let viewerInstance: ViewerInstance | null = null;
@@ -61,8 +61,8 @@ function logEvent(name: string, detail: string) {
   row.appendChild(detailSpan);
   eventFeed.prepend(row);
 
-  if (eventFeed.children.length > 30) {
-    eventFeed.removeChild(eventFeed.lastChild!);
+  if (eventFeed.children.length > 30 && eventFeed.lastChild) {
+    eventFeed.removeChild(eventFeed.lastChild);
   }
 }
 
@@ -109,7 +109,10 @@ function initViewerMode() {
 
   viewerInstance.on('selectionChanged', ({ selectedSeatIds, selectedSeats }) => {
     const count = selectedSeatIds.length;
-    document.getElementById('countSelected')!.textContent = count.toString();
+    const countEl = document.getElementById('countSelected');
+    if (countEl) {
+      countEl.textContent = count.toString();
+    }
 
     if (count > 0) {
       selectedPanel.style.display = 'block';
@@ -277,9 +280,7 @@ btnExport.addEventListener('click', () => {
     currentMode === 'viewer'
       ? viewerInstance?.getFloorplan()
       : editorInstance?.getFloorplan();
-  const jsonStr = JSON.stringify(plan, null, 2);
-  console.log('Floorplan JSON:', jsonStr);
-
+  const jsonStr = JSON.stringify(plan ?? currentFloorplan, null, 2);
   const blob = new Blob([jsonStr], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

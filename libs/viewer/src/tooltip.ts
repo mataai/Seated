@@ -72,11 +72,12 @@ export class TooltipManager {
       clearTimeout(this.activeTimeout);
     }
 
+    const provider = this.provider;
     this.activeTimeout = setTimeout(async () => {
       if (this.currentSeatId !== ctx.seat.id) return;
 
       try {
-        const info = await this.provider!(ctx);
+        const info = await provider(ctx);
         if (info && this.currentSeatId === ctx.seat.id) {
           this.cache.set(ctx.seat.id, info);
           this.renderContent(info);

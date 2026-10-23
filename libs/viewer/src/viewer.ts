@@ -5,6 +5,7 @@ import {
   TypedEventEmitter,
   validateLayout,
   type Floorplan,
+  type Vec2,
   type Violation,
 } from '@open-seats/core';
 import {
@@ -209,13 +210,13 @@ export class Viewer implements ViewerInstance {
     }
   };
 
-  private cachedSeatWorldPositions?: Map<string, { x: number; y: number }>;
+  private cachedSeatWorldPositions?: Map<string, Vec2>;
 
-  private getSeatWorldPositions(): Map<string, { x: number; y: number }> {
+  private getSeatWorldPositions(): Map<string, Vec2> {
     if (this.cachedSeatWorldPositions) {
       return this.cachedSeatWorldPositions;
     }
-    const map = new Map<string, { x: number; y: number }>();
+    const map = new Map<string, Vec2>();
     for (const [id, ctx] of this.seatContextMap.entries()) {
       const local = seatPosition(ctx.row, ctx.seat);
       const inBuilding = transformPoint(
@@ -232,6 +233,18 @@ export class Viewer implements ViewerInstance {
     }
     this.cachedSeatWorldPositions = map;
     return map;
+  }
+
+  private computeNavigationScore(
+    direction: 'ArrowRight' | 'ArrowLeft' | 'ArrowUp' | 'ArrowDown',
+    dx: number,
+    dy: number
+  ): number | null {
+    if (direction === 'ArrowRight' && dx > 1) return Math.hypot(dx, dy * 2.5);
+    if (direction === 'ArrowLeft' && dx < -1) return Math.hypot(-dx, dy * 2.5);
+    if (direction === 'ArrowDown' && dy > 1) return Math.hypot(dx * 2.5, dy);
+    if (direction === 'ArrowUp' && dy < -1) return Math.hypot(dx * 2.5, -dy);
+    return null;
   }
 
   private navigateSeatDirection(
@@ -261,24 +274,8 @@ export class Viewer implements ViewerInstance {
       const dx = pos.x - currentPos.x;
       const dy = pos.y - currentPos.y;
 
-      let validDirection = false;
-      let score = Infinity;
-
-      if (direction === 'ArrowRight' && dx > 1) {
-        validDirection = true;
-        score = Math.hypot(dx, dy * 2.5);
-      } else if (direction === 'ArrowLeft' && dx < -1) {
-        validDirection = true;
-        score = Math.hypot(-dx, dy * 2.5);
-      } else if (direction === 'ArrowDown' && dy > 1) {
-        validDirection = true;
-        score = Math.hypot(dx * 2.5, dy);
-      } else if (direction === 'ArrowUp' && dy < -1) {
-        validDirection = true;
-        score = Math.hypot(dx * 2.5, -dy);
-      }
-
-      if (validDirection && score < bestScore) {
+      const score = this.computeNavigationScore(direction, dx, dy);
+      if (score !== null && score < bestScore) {
         bestScore = score;
         bestId = id;
       }

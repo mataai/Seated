@@ -44,11 +44,9 @@ export function seatWorldPosition(
  */
 export function rowFootprint(row: Row, parentBuilding?: Building): Vec2[] {
   let maxIndex = 0;
-  if (row.seats && row.seats.length > 0) {
-    for (const seat of row.seats) {
-      if (seat.index > maxIndex) {
-        maxIndex = seat.index;
-      }
+  for (const seat of row.seats ?? []) {
+    if (seat.index > maxIndex) {
+      maxIndex = seat.index;
     }
   }
 

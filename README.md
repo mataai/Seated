@@ -1,5 +1,6 @@
 # OpenSeats / Seated
 
+[![CI](https://github.com/mataai/Seated/actions/workflows/ci.yml/badge.svg)](https://github.com/mataai/Seated/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
 [![Nx Monorepo](https://img.shields.io/badge/Nx-Monorepo-blueviolet.svg)](https://nx.dev)
