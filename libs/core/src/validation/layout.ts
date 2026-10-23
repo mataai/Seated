@@ -5,7 +5,14 @@ import {
   zoneFootprint,
 } from '../geometry/footprints';
 import { isValidPolygon } from '../geometry/polygon';
-import { polygonContains, polygonsOverlap } from '../geometry/overlap';
+import {
+  BoundingBox,
+  boundingBoxesOverlap,
+  computeBoundingBox,
+  polygonContains,
+  polygonsOverlap,
+} from '../geometry/overlap';
+import { GridSpatialIndex } from '../spatial/grid-index';
 
 export interface Violation {
   rule:
@@ -34,6 +41,7 @@ export function validateLayout(
 
   // 1. Validate building polygons & overlap
   const bFootprints = new Map<string, ReturnType<typeof buildingFootprint>>();
+  const bBoxes = new Map<string, BoundingBox>();
 
   for (const b of buildings) {
     if (!isValidPolygon(b.points, tol)) {
@@ -42,21 +50,28 @@ export function validateLayout(
         ids: [b.id],
       });
     }
-    bFootprints.set(b.id, buildingFootprint(b));
+    const poly = buildingFootprint(b);
+    bFootprints.set(b.id, poly);
+    bBoxes.set(b.id, computeBoundingBox(poly));
   }
 
   // Cross-building checks: buildings must not overlap
   for (let i = 0; i < buildings.length; i++) {
     const b1 = buildings[i];
     const poly1 = bFootprints.get(b1.id);
-    if (!poly1) continue;
+    const box1 = bBoxes.get(b1.id);
+    if (!poly1 || !box1) continue;
 
     for (let j = i + 1; j < buildings.length; j++) {
       const b2 = buildings[j];
       const poly2 = bFootprints.get(b2.id);
-      if (!poly2) continue;
+      const box2 = bBoxes.get(b2.id);
+      if (!poly2 || !box2) continue;
 
-      if (polygonsOverlap(poly1, poly2, tol)) {
+      if (
+        boundingBoxesOverlap(box1, box2, tol) &&
+        polygonsOverlap(poly1, poly2, tol, box1, box2)
+      ) {
         violations.push({
           rule: 'building-overlap',
           ids: [b1.id, b2.id],
@@ -71,7 +86,9 @@ export function validateLayout(
     const rows = b.rows ?? [];
 
     const zFootprints = new Map<string, ReturnType<typeof zoneFootprint>>();
+    const zBoxes = new Map<string, BoundingBox>();
     const rFootprints = new Map<string, ReturnType<typeof rowFootprint>>();
+    const rBoxes = new Map<string, BoundingBox>();
 
     // Validate zone polygons
     for (const z of zones) {
@@ -81,8 +98,13 @@ export function validateLayout(
           ids: [z.id],
         });
       }
-      zFootprints.set(z.id, zoneFootprint(z));
+      const poly = zoneFootprint(z);
+      zFootprints.set(z.id, poly);
+      zBoxes.set(z.id, computeBoundingBox(poly));
     }
+
+    // Spatial indexing for rows if substantial count
+    const rowSpatialIndex = rows.length > 8 ? new GridSpatialIndex(150) : null;
 
     // Validate row seat spacing & footprints
     for (const r of rows) {
@@ -92,14 +114,22 @@ export function validateLayout(
           ids: [r.id],
         });
       }
-      rFootprints.set(r.id, rowFootprint(r));
+      const poly = rowFootprint(r);
+      const box = computeBoundingBox(poly);
+      rFootprints.set(r.id, poly);
+      rBoxes.set(r.id, box);
+      rowSpatialIndex?.insert(r.id, box);
     }
 
     // Containment within building
+    const bPoly = b.points;
+    const bPolyBox = computeBoundingBox(bPoly);
+
     for (const z of zones) {
       const zPoly = zFootprints.get(z.id);
-      if (!zPoly) continue;
-      if (!polygonContains(b.points, zPoly, tol)) {
+      const zBox = zBoxes.get(z.id);
+      if (!zPoly || !zBox) continue;
+      if (!polygonContains(bPoly, zPoly, tol, bPolyBox, zBox)) {
         violations.push({
           rule: 'out-of-bounds',
           ids: [z.id, b.id],
@@ -109,8 +139,9 @@ export function validateLayout(
 
     for (const r of rows) {
       const rPoly = rFootprints.get(r.id);
-      if (!rPoly) continue;
-      if (!polygonContains(b.points, rPoly, tol)) {
+      const rBox = rBoxes.get(r.id);
+      if (!rPoly || !rBox) continue;
+      if (!polygonContains(bPoly, rPoly, tol, bPolyBox, rBox)) {
         violations.push({
           rule: 'out-of-bounds',
           ids: [r.id, b.id],
@@ -122,14 +153,19 @@ export function validateLayout(
     for (let i = 0; i < zones.length; i++) {
       const z1 = zones[i];
       const p1 = zFootprints.get(z1.id);
-      if (!p1) continue;
+      const b1 = zBoxes.get(z1.id);
+      if (!p1 || !b1) continue;
 
       for (let j = i + 1; j < zones.length; j++) {
         const z2 = zones[j];
         const p2 = zFootprints.get(z2.id);
-        if (!p2) continue;
+        const b2 = zBoxes.get(z2.id);
+        if (!p2 || !b2) continue;
 
-        if (polygonsOverlap(p1, p2, tol)) {
+        if (
+          boundingBoxesOverlap(b1, b2, tol) &&
+          polygonsOverlap(p1, p2, tol, b1, b2)
+        ) {
           violations.push({
             rule: 'zone-overlap',
             ids: [z1.id, z2.id],
@@ -139,21 +175,57 @@ export function validateLayout(
     }
 
     // Row vs Row overlap
-    for (let i = 0; i < rows.length; i++) {
-      const r1 = rows[i];
-      const p1 = rFootprints.get(r1.id);
-      if (!p1) continue;
+    if (rowSpatialIndex) {
+      const checkedPairs = new Set<string>();
+      for (const r1 of rows) {
+        const p1 = rFootprints.get(r1.id);
+        const b1 = rBoxes.get(r1.id);
+        if (!p1 || !b1) continue;
 
-      for (let j = i + 1; j < rows.length; j++) {
-        const r2 = rows[j];
-        const p2 = rFootprints.get(r2.id);
-        if (!p2) continue;
+        const candidates = rowSpatialIndex.query(b1);
+        for (const candId of candidates) {
+          if (candId <= r1.id) continue;
+          const pairKey = `${r1.id}:${candId}`;
+          if (checkedPairs.has(pairKey)) continue;
+          checkedPairs.add(pairKey);
 
-        if (polygonsOverlap(p1, p2, tol)) {
-          violations.push({
-            rule: 'row-overlap',
-            ids: [r1.id, r2.id],
-          });
+          const p2 = rFootprints.get(candId);
+          const b2 = rBoxes.get(candId);
+          if (!p2 || !b2) continue;
+
+          if (
+            boundingBoxesOverlap(b1, b2, tol) &&
+            polygonsOverlap(p1, p2, tol, b1, b2)
+          ) {
+            violations.push({
+              rule: 'row-overlap',
+              ids: [r1.id, candId],
+            });
+          }
+        }
+      }
+    } else {
+      for (let i = 0; i < rows.length; i++) {
+        const r1 = rows[i];
+        const p1 = rFootprints.get(r1.id);
+        const b1 = rBoxes.get(r1.id);
+        if (!p1 || !b1) continue;
+
+        for (let j = i + 1; j < rows.length; j++) {
+          const r2 = rows[j];
+          const p2 = rFootprints.get(r2.id);
+          const b2 = rBoxes.get(r2.id);
+          if (!p2 || !b2) continue;
+
+          if (
+            boundingBoxesOverlap(b1, b2, tol) &&
+            polygonsOverlap(p1, p2, tol, b1, b2)
+          ) {
+            violations.push({
+              rule: 'row-overlap',
+              ids: [r1.id, r2.id],
+            });
+          }
         }
       }
     }
@@ -161,17 +233,41 @@ export function validateLayout(
     // Zone vs Row overlap
     for (const z of zones) {
       const zPoly = zFootprints.get(z.id);
-      if (!zPoly) continue;
+      const zBox = zBoxes.get(z.id);
+      if (!zPoly || !zBox) continue;
 
-      for (const r of rows) {
-        const rPoly = rFootprints.get(r.id);
-        if (!rPoly) continue;
+      if (rowSpatialIndex) {
+        const candidates = rowSpatialIndex.query(zBox);
+        for (const candId of candidates) {
+          const rPoly = rFootprints.get(candId);
+          const rBox = rBoxes.get(candId);
+          if (!rPoly || !rBox) continue;
 
-        if (polygonsOverlap(zPoly, rPoly, tol)) {
-          violations.push({
-            rule: 'zone-row-overlap',
-            ids: [z.id, r.id],
-          });
+          if (
+            boundingBoxesOverlap(zBox, rBox, tol) &&
+            polygonsOverlap(zPoly, rPoly, tol, zBox, rBox)
+          ) {
+            violations.push({
+              rule: 'zone-row-overlap',
+              ids: [z.id, candId],
+            });
+          }
+        }
+      } else {
+        for (const r of rows) {
+          const rPoly = rFootprints.get(r.id);
+          const rBox = rBoxes.get(r.id);
+          if (!rPoly || !rBox) continue;
+
+          if (
+            boundingBoxesOverlap(zBox, rBox, tol) &&
+            polygonsOverlap(zPoly, rPoly, tol, zBox, rBox)
+          ) {
+            violations.push({
+              rule: 'zone-row-overlap',
+              ids: [z.id, r.id],
+            });
+          }
         }
       }
     }

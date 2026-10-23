@@ -3,6 +3,7 @@ import {
   cross,
   sub,
   distanceToSegment,
+  distanceToSegmentSq,
   approxEqual,
 } from './vec2';
 
@@ -81,7 +82,7 @@ export function isPointOnSegment(
   b: Vec2,
   tol = 0.01
 ): boolean {
-  return distanceToSegment(p, a, b) <= tol;
+  return distanceToSegmentSq(p, a, b) <= tol * tol;
 }
 
 export function isPointOnPolygonBoundary(
@@ -89,10 +90,11 @@ export function isPointOnPolygonBoundary(
   polygon: Vec2[],
   tol = 0.01
 ): boolean {
+  const tolSq = tol * tol;
   const n = polygon.length;
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
-    if (isPointOnSegment(p, polygon[i], polygon[j], tol)) {
+    if (distanceToSegmentSq(p, polygon[i], polygon[j]) <= tolSq) {
       return true;
     }
   }
@@ -140,10 +142,27 @@ export function pointStrictlyInPolygon(
   polygon: Vec2[],
   tol = 0.01
 ): boolean {
+  const n = polygon.length;
+  if (n < 3) return false;
+
   if (isPointOnPolygonBoundary(p, polygon, tol)) {
     return false;
   }
-  return pointInPolygon(p, polygon, tol);
+
+  let inside = false;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = polygon[i].x;
+    const yi = polygon[i].y;
+    const xj = polygon[j].x;
+    const yj = polygon[j].y;
+
+    const intersect =
+      yi > p.y !== yj > p.y &&
+      p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
 }
 
 /**
@@ -157,28 +176,45 @@ export function segmentsCrossInterior(
   p4: Vec2,
   tol = 0.01
 ): boolean {
+  // Broadphase bounding box check
+  const min1x = p1.x < p2.x ? p1.x : p2.x;
+  const max1x = p1.x > p2.x ? p1.x : p2.x;
+  const min2x = p3.x < p4.x ? p3.x : p4.x;
+  const max2x = p3.x > p4.x ? p3.x : p4.x;
+  if (max1x < min2x - tol || min1x > max2x + tol) return false;
+
+  const min1y = p1.y < p2.y ? p1.y : p2.y;
+  const max1y = p1.y > p2.y ? p1.y : p2.y;
+  const min2y = p3.y < p4.y ? p3.y : p4.y;
+  const max2y = p3.y > p4.y ? p3.y : p4.y;
+  if (max1y < min2y - tol || min1y > max2y + tol) return false;
+
   // Check if any endpoint is within tol of the other segment or endpoint
+  const tolSq = tol * tol;
   if (
-    isPointOnSegment(p1, p3, p4, tol) ||
-    isPointOnSegment(p2, p3, p4, tol) ||
-    isPointOnSegment(p3, p1, p2, tol) ||
-    isPointOnSegment(p4, p1, p2, tol)
+    distanceToSegmentSq(p1, p3, p4) <= tolSq ||
+    distanceToSegmentSq(p2, p3, p4) <= tolSq ||
+    distanceToSegmentSq(p3, p1, p2) <= tolSq ||
+    distanceToSegmentSq(p4, p1, p2) <= tolSq
   ) {
     return false;
   }
 
-  const d1 = sub(p2, p1);
-  const d2 = sub(p4, p3);
-  const denom = cross(d1, d2);
+  const d1x = p2.x - p1.x;
+  const d1y = p2.y - p1.y;
+  const d2x = p4.x - p3.x;
+  const d2y = p4.y - p3.y;
+  const denom = d1x * d2y - d1y * d2x;
 
   // Parallel or collinear
   if (Math.abs(denom) < 1e-9) {
     return false;
   }
 
-  const d3 = sub(p3, p1);
-  const t = cross(d3, d2) / denom;
-  const u = cross(d3, d1) / denom;
+  const d3x = p3.x - p1.x;
+  const d3y = p3.y - p1.y;
+  const t = (d3x * d2y - d3y * d2x) / denom;
+  const u = (d3x * d1y - d3y * d1x) / denom;
 
   const margin = 1e-4;
   return t > margin && t < 1 - margin && u > margin && u < 1 - margin;

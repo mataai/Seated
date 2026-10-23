@@ -54,46 +54,107 @@ export function rowFootprint(row: Row, parentBuilding?: Building): Vec2[] {
 
   const minX = -row.seatRadius;
   const maxX = maxIndex * row.seatSpacing + row.seatRadius;
+  const halfTable = row.tableWidth / 2;
+  const twoRadius = 2 * row.seatRadius;
 
-  let minY: number;
-  let maxY: number;
+  const minY = -(halfTable + twoRadius);
+  const maxY = row.side === 'both' ? halfTable + twoRadius : halfTable;
 
-  if (row.side === 'both') {
-    minY = -(row.tableWidth / 2 + 2 * row.seatRadius);
-    maxY = +(row.tableWidth / 2 + 2 * row.seatRadius);
+  const rx = row.position.x;
+  const ry = row.position.y;
+  const rot = row.rotation;
+
+  let p0x: number, p0y: number;
+  let p1x: number, p1y: number;
+  let p2x: number, p2y: number;
+  let p3x: number, p3y: number;
+
+  if (rot === 0) {
+    p0x = minX + rx;
+    p0y = minY + ry;
+    p1x = maxX + rx;
+    p1y = minY + ry;
+    p2x = maxX + rx;
+    p2y = maxY + ry;
+    p3x = minX + rx;
+    p3y = maxY + ry;
   } else {
-    // One-sided: seats are only on side 'a' (negative y)
-    minY = -(row.tableWidth / 2 + 2 * row.seatRadius);
-    maxY = +(row.tableWidth / 2);
+    const rad = (rot * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    p0x = rx + minX * cos - minY * sin;
+    p0y = ry + minX * sin + minY * cos;
+    p1x = rx + maxX * cos - minY * sin;
+    p1y = ry + maxX * sin + minY * cos;
+    p2x = rx + maxX * cos - maxY * sin;
+    p2y = ry + maxX * sin + maxY * cos;
+    p3x = rx + minX * cos - maxY * sin;
+    p3y = ry + minX * sin + maxY * cos;
   }
-
-  const localCorners: Vec2[] = [
-    { x: minX, y: minY },
-    { x: maxX, y: minY },
-    { x: maxX, y: maxY },
-    { x: minX, y: maxY },
-  ];
-
-  const inBuilding = localCorners.map((pt) =>
-    transformPoint(pt, row.position, row.rotation)
-  );
 
   if (!parentBuilding) {
-    return inBuilding;
+    return [
+      { x: p0x, y: p0y },
+      { x: p1x, y: p1y },
+      { x: p2x, y: p2y },
+      { x: p3x, y: p3y },
+    ];
   }
 
-  return inBuilding.map((pt) =>
-    transformPoint(pt, parentBuilding.position, parentBuilding.rotation)
-  );
+  const bx = parentBuilding.position.x;
+  const by = parentBuilding.position.y;
+  const brot = parentBuilding.rotation;
+
+  if (brot === 0) {
+    return [
+      { x: p0x + bx, y: p0y + by },
+      { x: p1x + bx, y: p1y + by },
+      { x: p2x + bx, y: p2y + by },
+      { x: p3x + bx, y: p3y + by },
+    ];
+  }
+
+  const brad = (brot * Math.PI) / 180;
+  const bcos = Math.cos(brad);
+  const bsin = Math.sin(brad);
+  return [
+    { x: bx + p0x * bcos - p0y * bsin, y: by + p0x * bsin + p0y * bcos },
+    { x: bx + p1x * bcos - p1y * bsin, y: by + p1x * bsin + p1y * bcos },
+    { x: bx + p2x * bcos - p2y * bsin, y: by + p2x * bsin + p2y * bcos },
+    { x: bx + p3x * bcos - p3y * bsin, y: by + p3x * bsin + p3y * bcos },
+  ];
 }
 
 /**
  * Computes the footprint polygon of a building in world space.
  */
 export function buildingFootprint(building: Building): Vec2[] {
-  return building.points.map((pt) =>
-    transformPoint(pt, building.position, building.rotation)
-  );
+  const bx = building.position.x;
+  const by = building.position.y;
+  const rot = building.rotation;
+  const pts = building.points;
+  const n = pts.length;
+  const result: Vec2[] = new Array(n);
+
+  if (rot === 0) {
+    for (let i = 0; i < n; i++) {
+      const p = pts[i];
+      result[i] = { x: bx + p.x, y: by + p.y };
+    }
+    return result;
+  }
+
+  const rad = (rot * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    result[i] = {
+      x: bx + p.x * cos - p.y * sin,
+      y: by + p.x * sin + p.y * cos,
+    };
+  }
+  return result;
 }
 
 /**
@@ -101,15 +162,56 @@ export function buildingFootprint(building: Building): Vec2[] {
  * Returned in building space by default, or in world space if parentBuilding is provided.
  */
 export function zoneFootprint(zone: Zone, parentBuilding?: Building): Vec2[] {
-  const inBuilding = zone.points.map((pt) =>
-    transformPoint(pt, zone.position, zone.rotation)
-  );
+  const zx = zone.position.x;
+  const zy = zone.position.y;
+  const zrot = zone.rotation;
+  const pts = zone.points;
+  const n = pts.length;
+  const inBuilding: Vec2[] = new Array(n);
+
+  if (zrot === 0) {
+    for (let i = 0; i < n; i++) {
+      const p = pts[i];
+      inBuilding[i] = { x: zx + p.x, y: zy + p.y };
+    }
+  } else {
+    const zrad = (zrot * Math.PI) / 180;
+    const zcos = Math.cos(zrad);
+    const zsin = Math.sin(zrad);
+    for (let i = 0; i < n; i++) {
+      const p = pts[i];
+      inBuilding[i] = {
+        x: zx + p.x * zcos - p.y * zsin,
+        y: zy + p.x * zsin + p.y * zcos,
+      };
+    }
+  }
 
   if (!parentBuilding) {
     return inBuilding;
   }
 
-  return inBuilding.map((pt) =>
-    transformPoint(pt, parentBuilding.position, parentBuilding.rotation)
-  );
+  const bx = parentBuilding.position.x;
+  const by = parentBuilding.position.y;
+  const brot = parentBuilding.rotation;
+
+  if (brot === 0) {
+    for (let i = 0; i < n; i++) {
+      const p = inBuilding[i];
+      inBuilding[i] = { x: bx + p.x, y: by + p.y };
+    }
+    return inBuilding;
+  }
+
+  const brad = (brot * Math.PI) / 180;
+  const bcos = Math.cos(brad);
+  const bsin = Math.sin(brad);
+  for (let i = 0; i < n; i++) {
+    const p = inBuilding[i];
+    inBuilding[i] = {
+      x: bx + p.x * bcos - p.y * bsin,
+      y: by + p.x * bsin + p.y * bcos,
+    };
+  }
+  return inBuilding;
 }

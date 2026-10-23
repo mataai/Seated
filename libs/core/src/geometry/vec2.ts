@@ -70,13 +70,31 @@ export function rotate(v: Vec2, angleDeg: number): Vec2 {
 }
 
 export function transformPoint(point: Vec2, origin: Vec2, rotationDeg: number): Vec2 {
-  const rotated = rotate(point, rotationDeg);
-  return add(origin, rotated);
+  if (rotationDeg === 0) {
+    return { x: origin.x + point.x, y: origin.y + point.y };
+  }
+  const rad = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return {
+    x: origin.x + point.x * cos - point.y * sin,
+    y: origin.y + point.x * sin + point.y * cos,
+  };
 }
 
 export function inverseTransformPoint(point: Vec2, origin: Vec2, rotationDeg: number): Vec2 {
-  const translated = sub(point, origin);
-  return rotate(translated, -rotationDeg);
+  const dx = point.x - origin.x;
+  const dy = point.y - origin.y;
+  if (rotationDeg === 0) {
+    return { x: dx, y: dy };
+  }
+  const rad = (-rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return {
+    x: dx * cos - dy * sin,
+    y: dx * sin + dy * cos,
+  };
 }
 
 export function approxEqual(a: Vec2, b: Vec2, tol = 0.01): boolean {
@@ -84,15 +102,22 @@ export function approxEqual(a: Vec2, b: Vec2, tol = 0.01): boolean {
 }
 
 export function distanceToSegmentSq(p: Vec2, a: Vec2, b: Vec2): number {
-  const ab = sub(b, a);
-  const ap = sub(p, a);
-  const abLenSq = lengthSq(ab);
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const apx = p.x - a.x;
+  const apy = p.y - a.y;
+  const abLenSq = abx * abx + aby * aby;
   if (abLenSq === 0) {
-    return distSq(p, a);
+    const dx = p.x - a.x;
+    const dy = p.y - a.y;
+    return dx * dx + dy * dy;
   }
-  const t = Math.max(0, Math.min(1, dot(ap, ab) / abLenSq));
-  const projection = add(a, mul(ab, t));
-  return distSq(p, projection);
+  const t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / abLenSq));
+  const projx = a.x + abx * t;
+  const projy = a.y + aby * t;
+  const dx = p.x - projx;
+  const dy = p.y - projy;
+  return dx * dx + dy * dy;
 }
 
 export function distanceToSegment(p: Vec2, a: Vec2, b: Vec2): number {

@@ -209,7 +209,12 @@ export class Viewer implements ViewerInstance {
     }
   };
 
-  private computeSeatWorldPositions(): Map<string, { x: number; y: number }> {
+  private cachedSeatWorldPositions?: Map<string, { x: number; y: number }>;
+
+  private getSeatWorldPositions(): Map<string, { x: number; y: number }> {
+    if (this.cachedSeatWorldPositions) {
+      return this.cachedSeatWorldPositions;
+    }
     const map = new Map<string, { x: number; y: number }>();
     for (const [id, ctx] of this.seatContextMap.entries()) {
       const local = seatPosition(ctx.row, ctx.seat);
@@ -225,6 +230,7 @@ export class Viewer implements ViewerInstance {
       );
       map.set(id, world);
     }
+    this.cachedSeatWorldPositions = map;
     return map;
   }
 
@@ -240,7 +246,7 @@ export class Viewer implements ViewerInstance {
       return;
     }
 
-    const worldPositions = this.computeSeatWorldPositions();
+    const worldPositions = this.getSeatWorldPositions();
     const currentPos = worldPositions.get(currentId);
     if (!currentPos) {
       this.focusSeat(seatIds[0]);
@@ -350,6 +356,7 @@ export class Viewer implements ViewerInstance {
 
   public load(floorplan: Floorplan): void {
     this.seatContextMap.clear();
+    this.cachedSeatWorldPositions = undefined;
 
     // Cache contexts
     for (const building of floorplan.buildings ?? []) {
@@ -470,6 +477,7 @@ export class Viewer implements ViewerInstance {
     this.renderer.destroy();
     this.emitter.removeAllListeners();
     this.seatContextMap.clear();
+    this.cachedSeatWorldPositions = undefined;
   }
 }
 

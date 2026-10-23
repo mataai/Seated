@@ -48,10 +48,15 @@ export class KonvaRenderer implements Renderer {
   private zoneGroups = new Map<string, Konva.Group>();
   private rowGroups = new Map<string, Konva.Group>();
   private rowRects = new Map<string, Konva.Rect>();
+  private rowModels = new Map<string, Row>();
   private buildingLines = new Map<string, Konva.Line>();
   private zoneLines = new Map<string, Konva.Line>();
   private selectedNodeIds = new Set<string>();
   private draggableNodes = false;
+
+  private draftRect?: Konva.Rect;
+  private draftCorners?: [Konva.Circle, Konva.Circle];
+  private draftBadge?: Konva.Text;
 
   private options: RendererOptions;
   private resizeObserver?: ResizeObserver;
@@ -222,6 +227,7 @@ export class KonvaRenderer implements Renderer {
     this.rowRects.clear();
     this.buildingLines.clear();
     this.zoneLines.clear();
+    this.rowModels.clear();
 
     this.backgroundLayer.destroyChildren();
     this.sceneLayer.destroyChildren();
@@ -473,6 +479,7 @@ export class KonvaRenderer implements Renderer {
       draggable: this.draggableNodes && isRowSelected,
     });
     this.rowGroups.set(row.id, rGroup);
+    this.rowModels.set(row.id, row);
 
     rGroup.on('dragstart', (e) => {
       e.cancelBubble = true;
@@ -759,8 +766,8 @@ export class KonvaRenderer implements Renderer {
     // Update rows
     for (const [id, rect] of this.rowRects) {
       const isSel = this.selectedNodeIds.has(id);
-      const row = this.floorplan?.buildings.flatMap((b) => b.rows ?? []).find((r) => r.id === id);
-      const hasTable = row && row.tableWidth > 0;
+      const row = this.rowModels.get(id);
+      const hasTable = !!row && row.tableWidth > 0;
       rect.stroke(isSel ? '#3b82f6' : (hasTable ? (row?.tableStyle?.stroke ?? '#444444') : 'transparent'));
       rect.strokeWidth(isSel ? 2.5 : (hasTable ? (row?.tableStyle?.strokeWidth ?? 1) : 0));
       rect.fill(
@@ -1079,7 +1086,13 @@ export class KonvaRenderer implements Renderer {
     this.buildingGroups.clear();
     this.zoneGroups.clear();
     this.rowGroups.clear();
+    this.rowRects.clear();
+    this.rowModels.clear();
+    this.buildingLines.clear();
+    this.zoneLines.clear();
+    this.seatStatuses.clear();
     this.selectedSeatIds.clear();
+    this.selectedNodeIds.clear();
   }
 }
 

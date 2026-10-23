@@ -761,9 +761,12 @@ export class Editor implements EditorInstance {
     };
 
     if (this.rules.enforce) {
-      const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
-      const targetB = testPlan.buildings.find((b) => b.id === buildingId)!;
-      targetB.zones.push(newZone);
+      const testPlan: Floorplan = {
+        ...this.floorplan,
+        buildings: this.floorplan.buildings.map((b) =>
+          b.id === buildingId ? { ...b, zones: [...(b.zones ?? []), newZone] } : b
+        ),
+      };
 
       const violations = canPlace(
         testPlan,
@@ -896,9 +899,12 @@ export class Editor implements EditorInstance {
     };
 
     if (this.rules.enforce) {
-      const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
-      const targetB = testPlan.buildings.find((b) => b.id === buildingId)!;
-      targetB.rows.push(newRow);
+      const testPlan: Floorplan = {
+        ...this.floorplan,
+        buildings: this.floorplan.buildings.map((b) =>
+          b.id === buildingId ? { ...b, rows: [...(b.rows ?? []), newRow] } : b
+        ),
+      };
 
       const violations = canPlace(
         testPlan,
@@ -1193,16 +1199,30 @@ export class Editor implements EditorInstance {
 
     if (this.rules.enforce) {
       // Test containment and overlap in target building
-      const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
-      const testSourceB = testPlan.buildings.find(
-        (b) => b.id === sourceBuilding!.id
-      )!;
-      const testTargetB = testPlan.buildings.find(
-        (b) => b.id === targetBuildingId
-      )!;
-
-      testSourceB.rows = testSourceB.rows.filter((r) => r.id !== rowId);
-      testTargetB.rows.push(proposedRow);
+      const testPlan: Floorplan = {
+        ...this.floorplan,
+        buildings: this.floorplan.buildings.map((b) => {
+          if (b.id === sourceBuilding!.id && b.id === targetBuildingId) {
+            return {
+              ...b,
+              rows: [...b.rows.filter((r) => r.id !== rowId), proposedRow],
+            };
+          }
+          if (b.id === sourceBuilding!.id) {
+            return {
+              ...b,
+              rows: b.rows.filter((r) => r.id !== rowId),
+            };
+          }
+          if (b.id === targetBuildingId) {
+            return {
+              ...b,
+              rows: [...(b.rows ?? []), proposedRow],
+            };
+          }
+          return b;
+        }),
+      };
 
       const violations = canPlace(
         testPlan,
@@ -1856,11 +1876,14 @@ export class Editor implements EditorInstance {
           break;
         }
 
-        const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
-        const testB = testPlan.buildings.find(
-          (b) => b.id === targetBuilding!.id
-        )!;
-        testB.zones.push(candidateZone);
+        const testPlan: Floorplan = {
+          ...this.floorplan,
+          buildings: this.floorplan.buildings.map((b) =>
+            b.id === targetBuilding!.id
+              ? { ...b, zones: [...(b.zones ?? []), candidateZone] }
+              : b
+          ),
+        };
         const violations = canPlace(
           testPlan,
           newId,
@@ -1953,11 +1976,14 @@ export class Editor implements EditorInstance {
           break;
         }
 
-        const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
-        const testB = testPlan.buildings.find(
-          (b) => b.id === targetBuilding!.id
-        )!;
-        testB.rows.push(candidateRow);
+        const testPlan: Floorplan = {
+          ...this.floorplan,
+          buildings: this.floorplan.buildings.map((b) =>
+            b.id === targetBuilding!.id
+              ? { ...b, rows: [...(b.rows ?? []), candidateRow] }
+              : b
+          ),
+        };
         const violations = canPlace(
           testPlan,
           newId,
@@ -2053,9 +2079,12 @@ export class Editor implements EditorInstance {
       };
 
       if (this.rules.enforce) {
-        const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
-        const idx = testPlan.buildings.findIndex((b) => b.id === nodeId);
-        testPlan.buildings[idx] = proposedBuilding;
+        const testPlan: Floorplan = {
+          ...this.floorplan,
+          buildings: this.floorplan.buildings.map((b) =>
+            b.id === nodeId ? proposedBuilding : b
+          ),
+        };
         const violations = canPlace(
           testPlan,
           nodeId,
@@ -2089,10 +2118,19 @@ export class Editor implements EditorInstance {
         const flippedPoints = flipPolygon(zone.points, direction);
 
         if (this.rules.enforce) {
-          const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
-          const testB = testPlan.buildings.find((item) => item.id === b.id)!;
-          const testZ = testB.zones.find((z) => z.id === nodeId)!;
-          testZ.points = flippedPoints;
+          const testPlan: Floorplan = {
+            ...this.floorplan,
+            buildings: this.floorplan.buildings.map((bItem) =>
+              bItem.id === b.id
+                ? {
+                    ...bItem,
+                    zones: bItem.zones.map((z) =>
+                      z.id === nodeId ? { ...z, points: flippedPoints } : z
+                    ),
+                  }
+                : bItem
+            ),
+          };
           const violations = canPlace(
             testPlan,
             nodeId,
@@ -2237,9 +2275,12 @@ export class Editor implements EditorInstance {
       const scaled = scalePolygon(building.points, scaleX, scaleY);
 
       if (this.rules.enforce) {
-        const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
-        const testB = testPlan.buildings.find((b) => b.id === nodeId)!;
-        testB.points = scaled;
+        const testPlan: Floorplan = {
+          ...this.floorplan,
+          buildings: this.floorplan.buildings.map((b) =>
+            b.id === nodeId ? { ...b, points: scaled } : b
+          ),
+        };
         const violations = canPlace(
           testPlan,
           nodeId,
@@ -2269,10 +2310,19 @@ export class Editor implements EditorInstance {
         const scaled = scalePolygon(zone.points, scaleX, scaleY);
 
         if (this.rules.enforce) {
-          const testPlan: Floorplan = JSON.parse(JSON.stringify(this.floorplan));
-          const testB = testPlan.buildings.find((item) => item.id === b.id)!;
-          const testZ = testB.zones.find((z) => z.id === nodeId)!;
-          testZ.points = scaled;
+          const testPlan: Floorplan = {
+            ...this.floorplan,
+            buildings: this.floorplan.buildings.map((bItem) =>
+              bItem.id === b.id
+                ? {
+                    ...bItem,
+                    zones: bItem.zones.map((z) =>
+                      z.id === nodeId ? { ...z, points: scaled } : z
+                    ),
+                  }
+                : bItem
+            ),
+          };
           const violations = canPlace(
             testPlan,
             nodeId,

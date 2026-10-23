@@ -53,13 +53,15 @@ export function boundingBoxesOverlap(
 export function polygonsOverlap(
   polyA: Vec2[],
   polyB: Vec2[],
-  tol = 0.01
+  tol = 0.01,
+  boxA?: BoundingBox,
+  boxB?: BoundingBox
 ): boolean {
   if (polyA.length < 3 || polyB.length < 3) return false;
 
-  const boxA = computeBoundingBox(polyA);
-  const boxB = computeBoundingBox(polyB);
-  if (!boundingBoxesOverlap(boxA, boxB, tol)) {
+  const bA = boxA ?? computeBoundingBox(polyA);
+  const bB = boxB ?? computeBoundingBox(polyB);
+  if (!boundingBoxesOverlap(bA, bB, tol)) {
     return false;
   }
 
@@ -114,19 +116,21 @@ export function polygonsOverlap(
 export function polygonContains(
   outer: Vec2[],
   inner: Vec2[],
-  tol = 0.01
+  tol = 0.01,
+  outerBox?: BoundingBox,
+  innerBox?: BoundingBox
 ): boolean {
   if (outer.length < 3 || inner.length < 3) return false;
 
-  const outerBox = computeBoundingBox(outer);
-  const innerBox = computeBoundingBox(inner);
+  const oBox = outerBox ?? computeBoundingBox(outer);
+  const iBox = innerBox ?? computeBoundingBox(inner);
 
   // Quick bounding box check: inner box cannot exceed outer box by more than tol
   if (
-    innerBox.minX < outerBox.minX - tol ||
-    innerBox.maxX > outerBox.maxX + tol ||
-    innerBox.minY < outerBox.minY - tol ||
-    innerBox.maxY > outerBox.maxY + tol
+    iBox.minX < oBox.minX - tol ||
+    iBox.maxX > oBox.maxX + tol ||
+    iBox.minY < oBox.minY - tol ||
+    iBox.maxY > oBox.maxY + tol
   ) {
     return false;
   }

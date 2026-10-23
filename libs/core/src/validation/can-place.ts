@@ -13,6 +13,7 @@ import {
 } from '../geometry/footprints';
 import { isValidPolygon } from '../geometry/polygon';
 import {
+  boundingBoxesOverlap,
   computeBoundingBox,
   polygonContains,
   polygonsOverlap,
@@ -64,20 +65,24 @@ export function canPlace(
 
     // Spatial index against other buildings
     const spatialIndex = new GridSpatialIndex(150);
-    const otherBuildingsMap = new Map<string, Vec2[]>();
+    const otherBuildingsMap = new Map<string, { poly: Vec2[]; box: ReturnType<typeof computeBoundingBox> }>();
 
     for (const other of buildings) {
       if (other.id === nodeId) continue;
       const poly = buildingFootprint(other);
-      otherBuildingsMap.set(other.id, poly);
-      spatialIndex.insert(other.id, computeBoundingBox(poly));
+      const box = computeBoundingBox(poly);
+      otherBuildingsMap.set(other.id, { poly, box });
+      spatialIndex.insert(other.id, box);
     }
 
     const candidateIds = spatialIndex.query(proposedBox);
     for (const otherId of candidateIds) {
-      const otherPoly = otherBuildingsMap.get(otherId);
-      if (!otherPoly) continue;
-      if (polygonsOverlap(proposedPoly, otherPoly, tol)) {
+      const otherItem = otherBuildingsMap.get(otherId);
+      if (!otherItem) continue;
+      if (
+        boundingBoxesOverlap(proposedBox, otherItem.box, tol) &&
+        polygonsOverlap(proposedPoly, otherItem.poly, tol, proposedBox, otherItem.box)
+      ) {
         violations.push({
           rule: 'building-overlap',
           ids: [nodeId, otherId],
@@ -86,9 +91,10 @@ export function canPlace(
     }
 
     // Check that existing children are not pushed out of bounds
+    const proposedBuildingBox = computeBoundingBox(proposed.points);
     for (const z of original.zones ?? []) {
       const zPoly = zoneFootprint(z);
-      if (!polygonContains(proposed.points, zPoly, tol)) {
+      if (!polygonContains(proposed.points, zPoly, tol, proposedBuildingBox)) {
         violations.push({
           rule: 'out-of-bounds',
           ids: [z.id, nodeId],
@@ -98,7 +104,7 @@ export function canPlace(
 
     for (const r of original.rows ?? []) {
       const rPoly = rowFootprint(r);
-      if (!polygonContains(proposed.points, rPoly, tol)) {
+      if (!polygonContains(proposed.points, rPoly, tol, proposedBuildingBox)) {
         violations.push({
           rule: 'out-of-bounds',
           ids: [r.id, nodeId],
@@ -129,9 +135,10 @@ export function canPlace(
 
       const proposedPoly = zoneFootprint(proposed);
       const proposedBox = computeBoundingBox(proposedPoly);
+      const parentBox = computeBoundingBox(b.points);
 
       // Check containment in parent building
-      if (!polygonContains(b.points, proposedPoly, tol)) {
+      if (!polygonContains(b.points, proposedPoly, tol, parentBox, proposedBox)) {
         violations.push({
           rule: 'out-of-bounds',
           ids: [nodeId, b.id],
@@ -140,26 +147,34 @@ export function canPlace(
 
       // Check overlap with sibling zones and rows using spatial index
       const spatialIndex = new GridSpatialIndex(100);
-      const siblingPolys = new Map<string, { type: 'zone' | 'row'; poly: Vec2[] }>();
+      const siblingPolys = new Map<
+        string,
+        { type: 'zone' | 'row'; poly: Vec2[]; box: ReturnType<typeof computeBoundingBox> }
+      >();
 
       for (const siblingZ of b.zones) {
         if (siblingZ.id === nodeId) continue;
         const poly = zoneFootprint(siblingZ);
-        siblingPolys.set(siblingZ.id, { type: 'zone', poly });
-        spatialIndex.insert(siblingZ.id, computeBoundingBox(poly));
+        const box = computeBoundingBox(poly);
+        siblingPolys.set(siblingZ.id, { type: 'zone', poly, box });
+        spatialIndex.insert(siblingZ.id, box);
       }
 
       for (const siblingR of b.rows ?? []) {
         const poly = rowFootprint(siblingR);
-        siblingPolys.set(siblingR.id, { type: 'row', poly });
-        spatialIndex.insert(siblingR.id, computeBoundingBox(poly));
+        const box = computeBoundingBox(poly);
+        siblingPolys.set(siblingR.id, { type: 'row', poly, box });
+        spatialIndex.insert(siblingR.id, box);
       }
 
       const candidates = spatialIndex.query(proposedBox);
       for (const candId of candidates) {
         const item = siblingPolys.get(candId);
         if (!item) continue;
-        if (polygonsOverlap(proposedPoly, item.poly, tol)) {
+        if (
+          boundingBoxesOverlap(proposedBox, item.box, tol) &&
+          polygonsOverlap(proposedPoly, item.poly, tol, proposedBox, item.box)
+        ) {
           violations.push({
             rule: item.type === 'zone' ? 'zone-overlap' : 'zone-row-overlap',
             ids: [nodeId, candId],
@@ -195,9 +210,10 @@ export function canPlace(
 
       const proposedPoly = rowFootprint(proposed);
       const proposedBox = computeBoundingBox(proposedPoly);
+      const parentBox = computeBoundingBox(b.points);
 
       // Check containment in parent building
-      if (!polygonContains(b.points, proposedPoly, tol)) {
+      if (!polygonContains(b.points, proposedPoly, tol, parentBox, proposedBox)) {
         violations.push({
           rule: 'out-of-bounds',
           ids: [nodeId, b.id],
@@ -206,26 +222,34 @@ export function canPlace(
 
       // Check overlap with sibling rows and zones using spatial index
       const spatialIndex = new GridSpatialIndex(100);
-      const siblingPolys = new Map<string, { type: 'zone' | 'row'; poly: Vec2[] }>();
+      const siblingPolys = new Map<
+        string,
+        { type: 'zone' | 'row'; poly: Vec2[]; box: ReturnType<typeof computeBoundingBox> }
+      >();
 
       for (const siblingR of b.rows) {
         if (siblingR.id === nodeId) continue;
         const poly = rowFootprint(siblingR);
-        siblingPolys.set(siblingR.id, { type: 'row', poly });
-        spatialIndex.insert(siblingR.id, computeBoundingBox(poly));
+        const box = computeBoundingBox(poly);
+        siblingPolys.set(siblingR.id, { type: 'row', poly, box });
+        spatialIndex.insert(siblingR.id, box);
       }
 
       for (const siblingZ of b.zones ?? []) {
         const poly = zoneFootprint(siblingZ);
-        siblingPolys.set(siblingZ.id, { type: 'zone', poly });
-        spatialIndex.insert(siblingZ.id, computeBoundingBox(poly));
+        const box = computeBoundingBox(poly);
+        siblingPolys.set(siblingZ.id, { type: 'zone', poly, box });
+        spatialIndex.insert(siblingZ.id, box);
       }
 
       const candidates = spatialIndex.query(proposedBox);
       for (const candId of candidates) {
         const item = siblingPolys.get(candId);
         if (!item) continue;
-        if (polygonsOverlap(proposedPoly, item.poly, tol)) {
+        if (
+          boundingBoxesOverlap(proposedBox, item.box, tol) &&
+          polygonsOverlap(proposedPoly, item.poly, tol, proposedBox, item.box)
+        ) {
           violations.push({
             rule: item.type === 'row' ? 'row-overlap' : 'zone-row-overlap',
             ids: [nodeId, candId],
