@@ -22,20 +22,20 @@ describe('SeatsEditorComponent', () => {
   });
 
   it('initializes editor and sets tool', () => {
-    component.floorplan = SAMPLE_FLOORPLAN;
-    component.tool = 'pan';
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.componentRef.setInput('tool', 'pan');
     fixture.detectChanges();
 
     expect(component).toBeTruthy();
     expect(
-      component.containerRef.nativeElement.querySelector(
-        '.open-seats-editor-canvas'
-      )
+      component
+        .containerRef()
+        .nativeElement.querySelector('.open-seats-editor-canvas')
     ).toBeTruthy();
   });
 
   it('switches tools and emits toolChange', () => {
-    component.floorplan = SAMPLE_FLOORPLAN;
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
     fixture.detectChanges();
 
     let currentTool = '';
@@ -48,7 +48,7 @@ describe('SeatsEditorComponent', () => {
   });
 
   it('toggles preview mode and emits previewToggle', () => {
-    component.floorplan = SAMPLE_FLOORPLAN;
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
     fixture.detectChanges();
 
     let previewState = false;
@@ -65,11 +65,11 @@ describe('SeatsEditorComponent', () => {
   });
 
   it('creates building and supports undo/redo', () => {
-    component.floorplan = {
+    fixture.componentRef.setInput('floorplan', {
       schemaVersion: 1,
       dimensions: { width: 1000, height: 1000 },
       buildings: [],
-    };
+    });
     fixture.detectChanges();
 
     const newBuilding = component.createBuilding(
@@ -96,11 +96,11 @@ describe('SeatsEditorComponent', () => {
   });
 
   it('manages building drawing creation mode and updates state', () => {
-    component.floorplan = {
+    fixture.componentRef.setInput('floorplan', {
       schemaVersion: 1,
       dimensions: { width: 1000, height: 1000 },
       buildings: [],
-    };
+    });
     fixture.detectChanges();
 
     expect(component.isDrawingBuilding).toBe(false);
@@ -120,11 +120,11 @@ describe('SeatsEditorComponent', () => {
   });
 
   it('updates buildingCreationError when buildingCreationFailed event is received', () => {
-    component.floorplan = {
+    fixture.componentRef.setInput('floorplan', {
       schemaVersion: 1,
       dimensions: { width: 1000, height: 1000 },
       buildings: [],
-    };
+    });
     fixture.detectChanges();
 
     component.startBuildingCreation('New Arena');

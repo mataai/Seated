@@ -1,9 +1,9 @@
 import {
   Component,
-  ViewChild,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   inject,
+  viewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
@@ -29,8 +29,8 @@ import type { RenderSeatContext } from '@open-seats/viewer';
 export class AppComponent {
   private cdr = inject(ChangeDetectorRef);
 
-  @ViewChild(SeatsViewerComponent) viewerComp?: SeatsViewerComponent;
-  @ViewChild(SeatsEditorComponent) editorComp?: SeatsEditorComponent;
+  readonly viewerComp = viewChild(SeatsViewerComponent);
+  readonly editorComp = viewChild(SeatsEditorComponent);
 
   public floorplan: Floorplan = structuredClone(SAMPLE_FLOORPLAN);
   public mode: 'viewer' | 'editor' = 'viewer';
@@ -38,7 +38,7 @@ export class AppComponent {
 
   public setTool(tool: ToolType): void {
     this.currentTool = tool;
-    this.editorComp?.setTool(tool);
+    this.editorComp()?.setTool(tool);
     this.cdr.markForCheck();
   }
 
@@ -64,8 +64,9 @@ export class AppComponent {
   public setMode(newMode: 'viewer' | 'editor'): void {
     if (this.mode === newMode) return;
 
-    if (this.mode === 'editor' && this.editorComp) {
-      const updated = this.editorComp.getFloorplan();
+    const editorComp = this.editorComp();
+    if (this.mode === 'editor' && editorComp) {
+      const updated = editorComp.getFloorplan();
       if (updated) this.floorplan = updated;
     }
 
@@ -76,25 +77,25 @@ export class AppComponent {
 
   public zoomIn(): void {
     if (this.mode === 'viewer') {
-      this.viewerComp?.zoomIn(1.2);
+      this.viewerComp()?.zoomIn(1.2);
     } else {
-      this.editorComp?.zoomIn(1.2);
+      this.editorComp()?.zoomIn(1.2);
     }
   }
 
   public zoomOut(): void {
     if (this.mode === 'viewer') {
-      this.viewerComp?.zoomOut(1.2);
+      this.viewerComp()?.zoomOut(1.2);
     } else {
-      this.editorComp?.zoomOut(1.2);
+      this.editorComp()?.zoomOut(1.2);
     }
   }
 
   public resetZoom(): void {
     if (this.mode === 'viewer') {
-      this.viewerComp?.resetZoom();
+      this.viewerComp()?.resetZoom();
     } else {
-      this.editorComp?.resetZoom();
+      this.editorComp()?.resetZoom();
     }
   }
 
@@ -148,13 +149,14 @@ export class AppComponent {
   }
 
   public reserveSelected(): void {
-    if (this.viewerComp) {
+    const viewerComp = this.viewerComp();
+    if (viewerComp) {
       const updateMap: Record<string, string> = { ...this.statuses };
       for (const id of this.selectedSeatIds) {
         updateMap[id] = 'reserved';
       }
       this.statuses = updateMap;
-      this.viewerComp.clearSelection();
+      viewerComp.clearSelection();
       this.addLog(
         'reserved',
         `Reserved ${this.selectedSeatIds.length} seat(s)`
@@ -164,7 +166,7 @@ export class AppComponent {
   }
 
   public clearSelection(): void {
-    this.viewerComp?.clearSelection();
+    this.viewerComp()?.clearSelection();
     this.cdr.markForCheck();
   }
 
@@ -172,7 +174,7 @@ export class AppComponent {
     const plan =
       this.mode === 'viewer'
         ? this.floorplan
-        : this.editorComp?.getFloorplan() || this.floorplan;
+        : this.editorComp()?.getFloorplan() || this.floorplan;
     const jsonStr = JSON.stringify(plan, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const blobUrl = URL.createObjectURL(blob);

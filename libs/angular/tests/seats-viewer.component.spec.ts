@@ -22,17 +22,17 @@ describe('SeatsViewerComponent', () => {
   });
 
   it('initializes viewer inside container after view init', () => {
-    component.floorplan = SAMPLE_FLOORPLAN;
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
     fixture.detectChanges();
 
     expect(component).toBeTruthy();
     expect(
-      component.containerRef.nativeElement.querySelector('.konvajs-content')
+      component.containerRef().nativeElement.querySelector('.konvajs-content')
     ).toBeTruthy();
   });
 
   it('selects, deselects and clears seat selection', () => {
-    component.floorplan = SAMPLE_FLOORPLAN;
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
     fixture.detectChanges();
 
     component.selectSeats(['seat-a-1']);
@@ -47,7 +47,7 @@ describe('SeatsViewerComponent', () => {
   });
 
   it('sets seat status and retrieves it', () => {
-    component.floorplan = SAMPLE_FLOORPLAN;
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
     fixture.detectChanges();
 
     component.setStatus('seat-a-1', 'reserved');
@@ -58,7 +58,7 @@ describe('SeatsViewerComponent', () => {
   });
 
   it('emits selectionChanged event when seats are selected', () => {
-    component.floorplan = SAMPLE_FLOORPLAN;
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
     fixture.detectChanges();
 
     let emitted: string[] = [];

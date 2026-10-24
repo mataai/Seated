@@ -7,13 +7,12 @@ import type {
 } from '@angular/core';
 import {
   Component,
-  EventEmitter,
-  Input,
   NgZone,
-  Output,
-  ViewChild,
   ChangeDetectionStrategy,
   inject,
+  input,
+  output,
+  viewChild,
 } from '@angular/core';
 import type { Floorplan, Violation } from '@open-seats/core';
 import {
@@ -47,36 +46,36 @@ import {
 export class SeatsViewerComponent
   implements AfterViewInit, OnChanges, OnDestroy
 {
-  @ViewChild('container', { static: true })
-  containerRef!: ElementRef<HTMLDivElement>;
+  readonly containerRef =
+    viewChild.required<ElementRef<HTMLDivElement>>('container');
 
-  @Input() floorplan?: Floorplan;
-  @Input() statuses?: Record<string, string>;
-  @Input() maxSelectable?: number;
-  @Input() options?: Partial<ViewerOptions>;
+  readonly floorplan = input<Floorplan>();
+  readonly statuses = input<Record<string, string>>();
+  readonly maxSelectable = input<number>();
+  readonly options = input<Partial<ViewerOptions>>();
 
-  @Output() ready = new EventEmitter<void>();
-  @Output() seatHovered = new EventEmitter<RenderSeatContext>();
-  @Output() seatHoverEnded = new EventEmitter<RenderSeatContext>();
-  @Output() seatSelected = new EventEmitter<RenderSeatContext>();
-  @Output() seatDeselected = new EventEmitter<RenderSeatContext>();
-  @Output() selectionChanged = new EventEmitter<{
+  readonly ready = output<void>();
+  readonly seatHovered = output<RenderSeatContext>();
+  readonly seatHoverEnded = output<RenderSeatContext>();
+  readonly seatSelected = output<RenderSeatContext>();
+  readonly seatDeselected = output<RenderSeatContext>();
+  readonly selectionChanged = output<{
     selectedSeatIds: string[];
     selectedSeats: RenderSeatContext[];
   }>();
-  @Output() floorplanLoaded = new EventEmitter<Floorplan>();
-  @Output() violationsUpdated = new EventEmitter<Violation[]>();
+  readonly floorplanLoaded = output<Floorplan>();
+  readonly violationsUpdated = output<Violation[]>();
 
   private viewer?: ViewerInstance;
   private ngZone = inject(NgZone);
 
   ngAfterViewInit(): void {
     this.ngZone.runOutsideAngular(() => {
-      this.viewer = createViewer(this.containerRef.nativeElement, {
-        ...this.options,
-        floorplan: this.floorplan,
-        statuses: this.statuses,
-        maxSelectable: this.maxSelectable,
+      this.viewer = createViewer(this.containerRef().nativeElement, {
+        ...this.options(),
+        floorplan: this.floorplan(),
+        statuses: this.statuses(),
+        maxSelectable: this.maxSelectable(),
       });
 
       this.viewer.on('ready', () => {
@@ -118,16 +117,18 @@ export class SeatsViewerComponent
     if (!viewer) return;
 
     this.ngZone.runOutsideAngular(() => {
-      if (changes['floorplan'] && this.floorplan) {
-        viewer.load(this.floorplan);
+      const floorplan = this.floorplan();
+      if (changes['floorplan'] && floorplan) {
+        viewer.load(floorplan);
       }
 
-      if (changes['statuses'] && this.statuses) {
-        viewer.setStatuses(this.statuses);
+      const statuses = this.statuses();
+      if (changes['statuses'] && statuses) {
+        viewer.setStatuses(statuses);
       }
 
       if (changes['maxSelectable']) {
-        viewer.setMaxSelectable(this.maxSelectable);
+        viewer.setMaxSelectable(this.maxSelectable());
       }
     });
   }

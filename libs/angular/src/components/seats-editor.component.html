@@ -1,6 +1,6 @@
 <div class="seats-editor-layout">
   <!-- 1. LEFT PANEL: TOOLS & EDITIONS -->
-  @if (showToolbar) {
+  @if (showToolbar()) {
     <aside class="editor-sidebar editor-left-panel">
       <!-- Tools & History -->
       <div class="panel-section">
@@ -536,7 +536,7 @@
     }
 
     <!-- Canvas Floating Context Bar -->
-    @if (showFloatingBar && selectedNodeId) {
+    @if (showFloatingBar() && selectedNodeId) {
       <div class="canvas-context-bar">
         <div class="context-bar-info">
           <span class="context-type-badge">{{
@@ -613,7 +613,7 @@
   </main>
 
   <!-- 3. RIGHT PANEL: OBJECT PROPERTIES PANEL -->
-  @if (showProperties) {
+  @if (showProperties()) {
     <aside class="editor-sidebar editor-right-panel">
       <div class="panel-header">
         <span>Object Properties</span>

@@ -7,15 +7,14 @@ import type {
 } from '@angular/core';
 import {
   Component,
-  EventEmitter,
   HostListener,
-  Input,
   NgZone,
-  Output,
-  ViewChild,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   inject,
+  input,
+  output,
+  viewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
@@ -50,23 +49,23 @@ export class SeatsEditorComponent
   private ngZone = inject(NgZone);
   private cdr = inject(ChangeDetectorRef);
 
-  @ViewChild('container', { static: true })
-  containerRef!: ElementRef<HTMLDivElement>;
+  readonly containerRef =
+    viewChild.required<ElementRef<HTMLDivElement>>('container');
 
-  @Input() floorplan?: Floorplan;
-  @Input() tool: ToolType = 'select';
-  @Input() options?: Partial<EditorOptions>;
+  readonly floorplan = input<Floorplan>();
+  readonly tool = input<ToolType>('select');
+  readonly options = input<Partial<EditorOptions>>();
 
   // Panel visibility inputs (enabled by default)
-  @Input() showToolbar = true;
-  @Input() showProperties = true;
-  @Input() showFloatingBar = true;
+  readonly showToolbar = input(true);
+  readonly showProperties = input(true);
+  readonly showFloatingBar = input(true);
 
-  @Output() change = new EventEmitter<Floorplan>();
-  @Output() toolChange = new EventEmitter<ToolType>();
-  @Output() selectionChange = new EventEmitter<string[]>();
-  @Output() previewToggle = new EventEmitter<boolean>();
-  @Output() violationsUpdated = new EventEmitter<Violation[]>();
+  readonly change = output<Floorplan>();
+  readonly toolChange = output<ToolType>();
+  readonly selectionChange = output<string[]>();
+  readonly previewToggle = output<boolean>();
+  readonly violationsUpdated = output<Violation[]>();
 
   private editor?: EditorInstance;
   private lastEmittedPlan?: Floorplan;
@@ -123,7 +122,7 @@ export class SeatsEditorComponent
   // Getters for Selection & Statistics
   // -------------------------------------------------------------
   public get currentFloorplan(): Floorplan | undefined {
-    return this.editor?.getFloorplan() ?? this.floorplan;
+    return this.editor?.getFloorplan() ?? this.floorplan();
   }
 
   public get selectedBuilding(): Building | null {
@@ -210,13 +209,14 @@ export class SeatsEditorComponent
   // -------------------------------------------------------------
   ngAfterViewInit(): void {
     this.ngZone.runOutsideAngular(() => {
-      this.editor = createEditor(this.containerRef.nativeElement, {
-        ...this.options,
-        floorplan: this.floorplan,
+      this.editor = createEditor(this.containerRef().nativeElement, {
+        ...this.options(),
+        floorplan: this.floorplan(),
       });
 
-      this.editor.setTool(this.tool);
-      this.currentTool = this.tool;
+      const tool = this.tool();
+      this.editor.setTool(tool);
+      this.currentTool = tool;
 
       this.editor.on('change', (plan) => {
         this.lastEmittedPlan = plan;
@@ -311,18 +311,20 @@ export class SeatsEditorComponent
     if (!editor) return;
 
     this.ngZone.runOutsideAngular(() => {
-      if (changes['floorplan'] && this.floorplan) {
-        if (this.floorplan !== this.lastEmittedPlan) {
+      const floorplan = this.floorplan();
+      if (changes['floorplan'] && floorplan) {
+        if (floorplan !== this.lastEmittedPlan) {
           const current = editor.getFloorplan();
-          if (JSON.stringify(current) !== JSON.stringify(this.floorplan)) {
-            editor.loadFloorplan(this.floorplan);
+          if (JSON.stringify(current) !== JSON.stringify(floorplan)) {
+            editor.loadFloorplan(floorplan);
           }
         }
       }
 
-      if (changes['tool'] && this.tool) {
-        this.currentTool = this.tool;
-        editor.setTool(this.tool);
+      const tool = this.tool();
+      if (changes['tool'] && tool) {
+        this.currentTool = tool;
+        editor.setTool(tool);
       }
     });
   }
