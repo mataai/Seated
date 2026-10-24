@@ -1,6 +1,6 @@
 {
   "name": "@open-seats/viewer",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Interactive, accessible seat-reservation viewer for OpenSeats floorplans.",
   "license": "GPL-3.0-or-later",
   "keywords": [
@@ -36,8 +36,8 @@
   },
   "sideEffects": false,
   "dependencies": {
-    "@open-seats/core": "0.0.1",
-    "@open-seats/renderer": "0.0.1",
+    "@open-seats/core": "0.1.0",
+    "@open-seats/renderer": "0.1.0",
     "dompurify": "^3.2.6"
   }
 }
