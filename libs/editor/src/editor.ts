@@ -1,14 +1,8 @@
 import {
   buildingFootprint,
   canPlace,
-  flipPolygon,
-  inverseTransformPoint,
   parseFloorplan,
-  polygonBoundingBox,
-  polygonCentroid,
   polygonsOverlap,
-  scalePolygon,
-  transformPoint,
   TypedEventEmitter,
   validateLayout,
   type Building,
@@ -24,6 +18,10 @@ import { createViewer, type ViewerInstance } from '@open-seats/viewer';
 import type { Command } from './history/command-stack';
 import { CommandStack } from './history/command-stack';
 import { NumberingService } from './numbering/numbering-service';
+import type { EditorContext } from './operations/context';
+import { ClipboardOperations } from './operations/clipboard';
+import { RowOperations } from './operations/rows';
+import { ShapeOperations } from './operations/shapes';
 import type {
   BuildingCreationMode,
   EditorEvents,
@@ -48,11 +46,10 @@ export class Editor implements EditorInstance {
   private activeTool: ToolType = 'select';
   private selectedNodeIds: string[] = [];
   private isPreviewMode = false;
-  private clipboard:
-    | { type: 'building'; data: Building }
-    | { type: 'zone'; data: Zone }
-    | { type: 'row'; data: Row }
-    | null = null;
+  private readonly ctx: EditorContext = this.createContext();
+  private readonly rowOps = new RowOperations(this.ctx);
+  private readonly clipboardOps = new ClipboardOperations(this.ctx);
+  private readonly shapeOps = new ShapeOperations(this.ctx);
 
   private isDrawingBuilding = false;
   private buildingCreationMode: BuildingCreationMode = 'outline';
@@ -249,6 +246,32 @@ export class Editor implements EditorInstance {
       }
     }
   };
+
+  private createContext(): EditorContext {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const editor = this;
+    return {
+      get floorplan() {
+        return editor.floorplan;
+      },
+      get rules() {
+        return editor.rules;
+      },
+      get commandStack() {
+        return editor.commandStack;
+      },
+      get emitter() {
+        return editor.emitter;
+      },
+      snap: (pt) => this.snap(pt),
+      emitChange: () => this.emitChange(),
+      batch: (name, fn) => this.batch(name, fn),
+      getSelectedNodeIds: () => this.selectedNodeIds,
+      selectNodes: (ids) => this.selectNodes(ids),
+      clearSelection: () => this.clearSelection(),
+      deleteNode: (id) => this.deleteNode(id),
+    };
+  }
 
   private snap(pt: Vec2): Vec2 {
     if (!this.grid.enabled || this.grid.size <= 0) return pt;
@@ -873,6 +896,8 @@ export class Editor implements EditorInstance {
     return this.createZone(buildingId, points, fill, position);
   }
 
+  // --- rows (./operations/rows.ts) ---
+
   public createRow(
     buildingId: string,
     position: Vec2,
@@ -885,99 +910,7 @@ export class Editor implements EditorInstance {
       rotation?: number;
     }
   ): Row | null {
-    const building = this.floorplan.buildings.find((b) => b.id === buildingId);
-    if (!building) return null;
-
-    const id = NumberingService.nextRowId();
-    const rowIndex = building.rows.length;
-    const rowLetter = NumberingService.rowLabel(rowIndex);
-    const side = opts?.side ?? 'both';
-    const seatSpacing = opts?.seatSpacing ?? 40;
-    const seatRadius = opts?.seatRadius ?? 14;
-    const tableWidth = opts?.tableWidth ?? 28;
-    const rotation = opts?.rotation ?? 0;
-    const snappedPos = this.snap(position);
-
-    const seats: Seat[] = [];
-    const count = Math.max(1, seatCount);
-
-    if (side === 'both') {
-      const slots = Math.ceil(count / 2);
-      let created = 0;
-      for (let i = 0; i < slots; i++) {
-        seats.push({
-          id: NumberingService.nextSeatId(),
-          index: i,
-          side: 'a',
-          label: `${rowLetter}-${i + 1}a`,
-        });
-        created++;
-        if (created < count) {
-          seats.push({
-            id: NumberingService.nextSeatId(),
-            index: i,
-            side: 'b',
-            label: `${rowLetter}-${i + 1}b`,
-          });
-          created++;
-        }
-      }
-    } else {
-      for (let i = 0; i < count; i++) {
-        seats.push({
-          id: NumberingService.nextSeatId(),
-          index: i,
-          side: 'a',
-          label: `${rowLetter}-${i + 1}`,
-        });
-      }
-    }
-
-    const newRow: Row = {
-      id,
-      label: rowLetter,
-      position: snappedPos,
-      rotation,
-      side,
-      seatSpacing,
-      seatRadius,
-      tableWidth,
-      seats,
-    };
-
-    if (this.rules.enforce) {
-      const testPlan: Floorplan = {
-        ...this.floorplan,
-        buildings: this.floorplan.buildings.map((b) =>
-          b.id === buildingId ? { ...b, rows: [...(b.rows ?? []), newRow] } : b
-        ),
-      };
-
-      const violations = canPlace(
-        testPlan,
-        id,
-        {},
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) {
-        return null;
-      }
-    }
-
-    const command: Command = {
-      name: `Create Row ${rowLetter}`,
-      execute: () => {
-        building.rows.push(newRow);
-      },
-      undo: () => {
-        const idx = building.rows.findIndex((r) => r.id === id);
-        if (idx >= 0) building.rows.splice(idx, 1);
-      },
-    };
-
-    this.commandStack.execute(command);
-    this.emitChange();
-    return newRow;
+    return this.rowOps.createRow(buildingId, position, seatCount, opts);
   }
 
   public addSeatToRow(
@@ -985,66 +918,53 @@ export class Editor implements EditorInstance {
     rowId: string,
     seatSide: 'a' | 'b' = 'a'
   ): Seat | null {
-    const building = this.floorplan.buildings.find((b) => b.id === buildingId);
-    if (!building) return null;
+    return this.rowOps.addSeatToRow(buildingId, rowId, seatSide);
+  }
 
-    const row = building.rows.find((r) => r.id === rowId);
-    if (!row) return null;
+  public reparentRow(
+    rowId: string,
+    targetBuildingId: string,
+    dropWorldPosition?: Vec2
+  ): boolean {
+    return this.rowOps.reparentRow(rowId, targetBuildingId, dropWorldPosition);
+  }
 
-    if (row.side === 'one' && seatSide === 'b') {
-      return null;
-    }
+  public addSeatOnCanvas(buildingId: string, position: Vec2): Row | null {
+    return this.rowOps.addSeatOnCanvas(buildingId, position);
+  }
 
-    const currentMaxIndex =
-      row.seats.length > 0 ? Math.max(...row.seats.map((s) => s.index)) : -1;
-
-    // Check if slot on currentMaxIndex is free for requested side
-    const slotFilled = row.seats.some(
-      (s) => s.index === currentMaxIndex && s.side === seatSide
+  public moveSeatToRow(
+    sourceRowId: string,
+    seatId: string,
+    targetRowId: string,
+    targetSide: 'a' | 'b' = 'a'
+  ): boolean {
+    return this.rowOps.moveSeatToRow(
+      sourceRowId,
+      seatId,
+      targetRowId,
+      targetSide
     );
-    const newIndex = slotFilled
-      ? currentMaxIndex + 1
-      : Math.max(0, currentMaxIndex);
+  }
 
-    const newSeat: Seat = {
-      id: NumberingService.nextSeatId(),
-      index: newIndex,
-      side: seatSide,
-      label: '', // will be renumbered
-    };
+  public setRowSide(rowId: string, side: 'one' | 'both'): boolean {
+    return this.rowOps.setRowSide(rowId, side);
+  }
 
-    const proposedSeats = [...row.seats, newSeat];
-    const renumbered = NumberingService.renumberRowSeats({
-      ...row,
-      seats: proposedSeats,
-    });
+  public setRowTableWidth(rowId: string, tableWidth: number): boolean {
+    return this.rowOps.setRowTableWidth(rowId, tableWidth);
+  }
 
-    if (this.rules.enforce) {
-      const violations = canPlace(
-        this.floorplan,
-        rowId,
-        { seats: renumbered },
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) {
-        return null;
-      }
-    }
+  public setRowSeatSpacing(rowId: string, seatSpacing: number): boolean {
+    return this.rowOps.setRowSeatSpacing(rowId, seatSpacing);
+  }
 
-    const oldSeats = [...row.seats];
-    const command: Command = {
-      name: `Add Seat to Row ${row.label}`,
-      execute: () => {
-        row.seats = renumbered;
-      },
-      undo: () => {
-        row.seats = oldSeats;
-      },
-    };
+  public setRowSeatRadius(rowId: string, seatRadius: number): boolean {
+    return this.rowOps.setRowSeatRadius(rowId, seatRadius);
+  }
 
-    this.commandStack.execute(command);
-    this.emitChange();
-    return newSeat;
+  public setRowSeatCount(rowId: string, seatCount: number): boolean {
+    return this.rowOps.setRowSeatCount(rowId, seatCount);
   }
 
   public moveNode(nodeId: string, newPosition: Vec2): boolean {
@@ -1144,119 +1064,6 @@ export class Editor implements EditorInstance {
     return true;
   }
 
-  public reparentRow(
-    rowId: string,
-    targetBuildingId: string,
-    dropWorldPosition?: Vec2
-  ): boolean {
-    let sourceBuilding: Building | undefined;
-    let row: Row | undefined;
-
-    for (const b of this.floorplan.buildings) {
-      const r = (b.rows ?? []).find((item) => item.id === rowId);
-      if (r) {
-        sourceBuilding = b;
-        row = r;
-        break;
-      }
-    }
-
-    if (!sourceBuilding || !row || sourceBuilding.id === targetBuildingId) {
-      return false;
-    }
-
-    const srcBuilding = sourceBuilding;
-    const movingRow = row;
-
-    const targetBuilding = this.floorplan.buildings.find(
-      (b) => b.id === targetBuildingId
-    );
-    if (!targetBuilding) return false;
-
-    // Apply coordinate transform from source to world (or use dropWorldPosition), then world to target
-    const worldPos =
-      dropWorldPosition ??
-      transformPoint(
-        movingRow.position,
-        srcBuilding.position,
-        srcBuilding.rotation
-      );
-    const newLocalPos = inverseTransformPoint(
-      worldPos,
-      targetBuilding.position,
-      targetBuilding.rotation
-    );
-    const newLocalRot =
-      movingRow.rotation + srcBuilding.rotation - targetBuilding.rotation;
-
-    const proposedRow: Row = {
-      ...movingRow,
-      position: this.snap(newLocalPos),
-      rotation: newLocalRot,
-    };
-
-    if (this.rules.enforce) {
-      // Test containment and overlap in target building
-      const testPlan: Floorplan = {
-        ...this.floorplan,
-        buildings: this.floorplan.buildings.map((b) => {
-          if (b.id === srcBuilding.id && b.id === targetBuildingId) {
-            return {
-              ...b,
-              rows: [...b.rows.filter((r) => r.id !== rowId), proposedRow],
-            };
-          }
-          if (b.id === srcBuilding.id) {
-            return {
-              ...b,
-              rows: b.rows.filter((r) => r.id !== rowId),
-            };
-          }
-          if (b.id === targetBuildingId) {
-            return {
-              ...b,
-              rows: [...(b.rows ?? []), proposedRow],
-            };
-          }
-          return b;
-        }),
-      };
-
-      const violations = canPlace(
-        testPlan,
-        rowId,
-        {},
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) {
-        return false;
-      }
-    }
-
-    const oldPos = movingRow.position;
-    const oldRot = movingRow.rotation;
-
-    const command: Command = {
-      name: `Reparent Row ${movingRow.label} to ${targetBuilding.label}`,
-      execute: () => {
-        srcBuilding.rows = srcBuilding.rows.filter((r) => r.id !== rowId);
-        movingRow.position = proposedRow.position;
-        movingRow.rotation = proposedRow.rotation;
-        targetBuilding.rows.push(movingRow);
-      },
-      undo: () => {
-        targetBuilding.rows = targetBuilding.rows.filter((r) => r.id !== rowId);
-        movingRow.position = oldPos;
-        movingRow.rotation = oldRot;
-        srcBuilding.rows.push(movingRow);
-      },
-    };
-
-    this.commandStack.execute(command);
-    this.emitChange();
-    return true;
-  }
-
   public deleteNode(nodeId: string): boolean {
     const found = this.findNode(nodeId);
     if (!found) return false;
@@ -1280,922 +1087,70 @@ export class Editor implements EditorInstance {
     return true;
   }
 
-  public addSeatOnCanvas(buildingId: string, position: Vec2): Row | null {
-    return this.createRow(buildingId, position, 1, {
-      side: 'one',
-      tableWidth: 0,
-    });
-  }
+  // --- clipboard (./operations/clipboard.ts) ---
 
-  public moveSeatToRow(
-    sourceRowId: string,
-    seatId: string,
-    targetRowId: string,
-    targetSide: 'a' | 'b' = 'a'
-  ): boolean {
-    if (sourceRowId === targetRowId) return false;
-
-    let sourceRow: Row | undefined;
-    let targetRow: Row | undefined;
-
-    for (const b of this.floorplan.buildings) {
-      for (const r of b.rows ?? []) {
-        if (r.id === sourceRowId) sourceRow = r;
-        if (r.id === targetRowId) targetRow = r;
-      }
-    }
-
-    if (!sourceRow || !targetRow) return false;
-    if (targetRow.side === 'one' && targetSide === 'b') return false;
-
-    const seatIdx = sourceRow.seats.findIndex((s) => s.id === seatId);
-    if (seatIdx < 0) return false;
-
-    const movedSeat = sourceRow.seats[seatIdx];
-
-    const currentMaxIdx =
-      targetRow.seats.length > 0
-        ? Math.max(...targetRow.seats.map((s) => s.index))
-        : -1;
-    const slotFilled = targetRow.seats.some(
-      (s) => s.index === currentMaxIdx && s.side === targetSide
-    );
-    const newIndex = slotFilled
-      ? currentMaxIdx + 1
-      : Math.max(0, currentMaxIdx);
-
-    const proposedSeat: Seat = {
-      ...movedSeat,
-      index: newIndex,
-      side: targetSide,
-    };
-
-    const proposedTargetSeats = NumberingService.renumberRowSeats({
-      ...targetRow,
-      seats: [...targetRow.seats, proposedSeat],
-    });
-
-    const proposedSourceSeats = NumberingService.renumberRowSeats({
-      ...sourceRow,
-      seats: sourceRow.seats.filter((s) => s.id !== seatId),
-    });
-
-    if (this.rules.enforce) {
-      const violations = canPlace(
-        this.floorplan,
-        targetRowId,
-        { seats: proposedTargetSeats },
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) return false;
-    }
-
-    const oldSourceSeats = [...sourceRow.seats];
-    const oldTargetSeats = [...targetRow.seats];
-
-    const srcRow = sourceRow;
-    const dstRow = targetRow;
-
-    this.commandStack.execute({
-      name: `Move Seat ${movedSeat.label} to Row ${dstRow.label}`,
-      execute: () => {
-        srcRow.seats = proposedSourceSeats;
-        dstRow.seats = proposedTargetSeats;
-      },
-      undo: () => {
-        srcRow.seats = oldSourceSeats;
-        dstRow.seats = oldTargetSeats;
-      },
-    });
-
-    this.emitChange();
-    return true;
-  }
-
-  public setRowSide(rowId: string, side: 'one' | 'both'): boolean {
-    let targetRow: Row | undefined;
-    for (const b of this.floorplan.buildings) {
-      const r = (b.rows ?? []).find((row) => row.id === rowId);
-      if (r) {
-        targetRow = r;
-        break;
-      }
-    }
-    if (!targetRow || targetRow.side === side) return false;
-
-    let proposedSeats = [...targetRow.seats];
-    if (side === 'one') {
-      proposedSeats = proposedSeats
-        .filter((s) => s.side === 'a')
-        .map((s, idx) => ({ ...s, index: idx }));
-    }
-    const renumbered = NumberingService.renumberRowSeats({
-      ...targetRow,
-      side,
-      seats: proposedSeats,
-    });
-
-    if (this.rules.enforce) {
-      const violations = canPlace(
-        this.floorplan,
-        rowId,
-        { side, seats: renumbered },
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) return false;
-    }
-
-    const row = targetRow;
-    const oldSide = row.side;
-    const oldSeats = [...row.seats];
-
-    this.commandStack.execute({
-      name: `Set Row ${row.label} side to ${side}`,
-      execute: () => {
-        row.side = side;
-        row.seats = renumbered;
-      },
-      undo: () => {
-        row.side = oldSide;
-        row.seats = oldSeats;
-      },
-    });
-
-    this.emitChange();
-    return true;
-  }
-
-  public setRowTableWidth(rowId: string, tableWidth: number): boolean {
-    let targetRow: Row | undefined;
-    for (const b of this.floorplan.buildings) {
-      const r = (b.rows ?? []).find((row) => row.id === rowId);
-      if (r) {
-        targetRow = r;
-        break;
-      }
-    }
-    if (!targetRow || tableWidth < 0) return false;
-
-    if (this.rules.enforce) {
-      const violations = canPlace(
-        this.floorplan,
-        rowId,
-        { tableWidth },
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) return false;
-    }
-
-    const row = targetRow;
-    const oldWidth = row.tableWidth;
-    this.commandStack.execute({
-      name: `Set Row ${row.label} table width`,
-      execute: () => {
-        row.tableWidth = tableWidth;
-      },
-      undo: () => {
-        row.tableWidth = oldWidth;
-      },
-    });
-
-    this.emitChange();
-    return true;
-  }
-
-  public setRowSeatSpacing(rowId: string, seatSpacing: number): boolean {
-    let targetRow: Row | undefined;
-    for (const b of this.floorplan.buildings) {
-      const r = (b.rows ?? []).find((row) => row.id === rowId);
-      if (r) {
-        targetRow = r;
-        break;
-      }
-    }
-    if (!targetRow || seatSpacing < 2 * targetRow.seatRadius) return false;
-
-    if (this.rules.enforce) {
-      const violations = canPlace(
-        this.floorplan,
-        rowId,
-        { seatSpacing },
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) {
-        this.emitter.emit('violationsUpdated', violations);
-        return false;
-      }
-    }
-
-    const row = targetRow;
-    const oldSpacing = row.seatSpacing;
-    this.commandStack.execute({
-      name: `Set Row ${row.label} seat spacing`,
-      execute: () => {
-        row.seatSpacing = seatSpacing;
-      },
-      undo: () => {
-        row.seatSpacing = oldSpacing;
-      },
-    });
-
-    this.emitChange();
-    return true;
-  }
-
-  public setRowSeatRadius(rowId: string, seatRadius: number): boolean {
-    if (seatRadius <= 0) return false;
-    let targetRow: Row | undefined;
-    for (const b of this.floorplan.buildings) {
-      const r = (b.rows ?? []).find((item) => item.id === rowId);
-      if (r) {
-        targetRow = r;
-        break;
-      }
-    }
-    if (!targetRow || targetRow.seatSpacing < 2 * seatRadius) return false;
-
-    if (this.rules.enforce) {
-      const violations = canPlace(
-        this.floorplan,
-        rowId,
-        { seatRadius },
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) return false;
-    }
-
-    const row = targetRow;
-    const oldRadius = row.seatRadius;
-    this.commandStack.execute({
-      name: `Set Row ${row.label} seat radius`,
-      execute: () => {
-        row.seatRadius = seatRadius;
-      },
-      undo: () => {
-        row.seatRadius = oldRadius;
-      },
-    });
-
-    this.emitChange();
-    return true;
-  }
-
-  public setRowSeatCount(rowId: string, seatCount: number): boolean {
-    if (seatCount < 1) return false;
-    let targetRow: Row | undefined;
-    for (const b of this.floorplan.buildings) {
-      const r = (b.rows ?? []).find((item) => item.id === rowId);
-      if (r) {
-        targetRow = r;
-        break;
-      }
-    }
-    if (!targetRow) return false;
-    if (targetRow.seats.length === seatCount) return true;
-
-    const oldSeats = [...targetRow.seats];
-    const side = targetRow.side;
-    let proposedSeats: Seat[] = [];
-
-    if (seatCount > targetRow.seats.length) {
-      proposedSeats = [...targetRow.seats];
-      const needed = seatCount - targetRow.seats.length;
-
-      if (side === 'both') {
-        let currentMaxIdx =
-          proposedSeats.length > 0
-            ? Math.max(...proposedSeats.map((s) => s.index))
-            : -1;
-        for (let i = 0; i < needed; i++) {
-          const hasA = proposedSeats.some(
-            (s) => s.index === currentMaxIdx && s.side === 'a'
-          );
-          const hasB = proposedSeats.some(
-            (s) => s.index === currentMaxIdx && s.side === 'b'
-          );
-
-          let targetSide: 'a' | 'b' = 'a';
-          let targetIndex = currentMaxIdx;
-
-          if (!hasA) {
-            targetSide = 'a';
-          } else if (!hasB) {
-            targetSide = 'b';
-          } else {
-            currentMaxIdx++;
-            targetIndex = currentMaxIdx;
-            targetSide = 'a';
-          }
-
-          proposedSeats.push({
-            id: NumberingService.nextSeatId(),
-            index: targetIndex,
-            side: targetSide,
-            label: '',
-          });
-        }
-      } else {
-        const currentMaxIdx =
-          proposedSeats.length > 0
-            ? Math.max(...proposedSeats.map((s) => s.index))
-            : -1;
-        for (let i = 0; i < needed; i++) {
-          proposedSeats.push({
-            id: NumberingService.nextSeatId(),
-            index: currentMaxIdx + 1 + i,
-            side: 'a',
-            label: '',
-          });
-        }
-      }
-    } else {
-      const sorted = [...targetRow.seats].sort((a, b) => {
-        if (b.index !== a.index) return b.index - a.index;
-        return b.side.localeCompare(a.side);
-      });
-      proposedSeats = sorted.slice(sorted.length - seatCount);
-    }
-
-    const renumbered = NumberingService.renumberRowSeats({
-      ...targetRow,
-      seats: proposedSeats,
-    });
-
-    if (this.rules.enforce) {
-      const violations = canPlace(
-        this.floorplan,
-        rowId,
-        { seats: renumbered },
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) return false;
-    }
-
-    const row = targetRow;
-    this.commandStack.execute({
-      name: `Set Row ${row.label} seat count to ${seatCount}`,
-      execute: () => {
-        row.seats = renumbered;
-      },
-      undo: () => {
-        row.seats = oldSeats;
-      },
-    });
-
-    this.emitChange();
-    return true;
-  }
-
-  // Context Actions: Copy, Cut, Paste, Duplicate, Flip
   public copySelection(): boolean {
-    if (this.selectedNodeIds.length === 0) return false;
-    const selectedId = this.selectedNodeIds[0];
-
-    const building = this.floorplan.buildings.find((b) => b.id === selectedId);
-    if (building) {
-      this.clipboard = {
-        type: 'building',
-        data: structuredClone(building),
-      };
-      return true;
-    }
-
-    for (const b of this.floorplan.buildings) {
-      const zone = (b.zones ?? []).find((z) => z.id === selectedId);
-      if (zone) {
-        this.clipboard = {
-          type: 'zone',
-          data: structuredClone(zone),
-        };
-        return true;
-      }
-      const row = (b.rows ?? []).find((r) => r.id === selectedId);
-      if (row) {
-        this.clipboard = {
-          type: 'row',
-          data: structuredClone(row),
-        };
-        return true;
-      }
-    }
-    return false;
+    return this.clipboardOps.copySelection();
   }
 
   public cutSelection(): boolean {
-    if (this.selectedNodeIds.length === 0) return false;
-    const success = this.copySelection();
-    if (!success) return false;
-
-    const idsToDelete = [...this.selectedNodeIds];
-    this.batch(`Cut ${idsToDelete.length} items`, () => {
-      for (const id of idsToDelete) {
-        this.deleteNode(id);
-      }
-    });
-    this.clearSelection();
-    return true;
+    return this.clipboardOps.cutSelection();
   }
 
   public canPaste(): boolean {
-    return this.clipboard !== null;
-  }
-
-  private resolveTargetBuilding(
-    targetBuildingId?: string
-  ): Building | undefined {
-    if (targetBuildingId) {
-      const found = this.floorplan.buildings.find(
-        (b) => b.id === targetBuildingId
-      );
-      if (found) return found;
-    }
-
-    if (this.selectedNodeIds.length > 0) {
-      const selId = this.selectedNodeIds[0];
-      const selectedBuilding = this.floorplan.buildings.find(
-        (b) => b.id === selId
-      );
-      if (selectedBuilding) return selectedBuilding;
-
-      for (const building of this.floorplan.buildings) {
-        if (
-          building.zones.some((z) => z.id === selId) ||
-          building.rows.some((r) => r.id === selId)
-        ) {
-          return building;
-        }
-      }
-    }
-
-    return this.floorplan.buildings[0];
-  }
-
-  private pasteBuilding(original: Building, offset: Vec2): boolean {
-    const newId = NumberingService.nextBuildingId();
-    const bbox = polygonBoundingBox(original.points);
-    const bWidth = Math.round(bbox.width || 200);
-    const bHeight = Math.round(bbox.height || 200);
-
-    const newBuildingTemplate: Building = {
-      ...original,
-      id: newId,
-      label: `${original.label} Copy`,
-      position: { ...original.position },
-      points: original.points.map((p) => ({ ...p })),
-      zones: original.zones.map((z) => ({
-        ...z,
-        id: NumberingService.nextZoneId(),
-        points: z.points.map((p) => ({ ...p })),
-        position: { ...z.position },
-      })),
-      rows: original.rows.map((r) => {
-        const newRow: Row = {
-          ...r,
-          id: NumberingService.nextRowId(),
-          position: { ...r.position },
-          seats: r.seats.map((s) => ({
-            ...s,
-            id: NumberingService.nextSeatId(),
-          })),
-        };
-        newRow.seats = NumberingService.renumberRowSeats(newRow);
-        return newRow;
-      }),
-    };
-
-    const candidateOffsets: Vec2[] = [
-      offset,
-      { x: 0, y: 0 },
-      { x: bWidth + 40, y: 0 },
-      { x: 0, y: bHeight + 40 },
-      { x: -(bWidth + 40), y: 0 },
-      { x: 0, y: -(bHeight + 40) },
-      { x: bWidth + 40, y: bHeight + 40 },
-      { x: 40, y: 40 },
-      { x: 80, y: 80 },
-    ];
-
-    let placedBuilding: Building | null = null;
-    for (const cand of candidateOffsets) {
-      const newPos = this.snap({
-        x: original.position.x + cand.x,
-        y: original.position.y + cand.y,
-      });
-      const candidateBuilding: Building = {
-        ...newBuildingTemplate,
-        position: newPos,
-      };
-
-      if (!this.rules.enforce) {
-        placedBuilding = candidateBuilding;
-        break;
-      }
-
-      const testPlan: Floorplan = {
-        ...this.floorplan,
-        buildings: [...this.floorplan.buildings, candidateBuilding],
-      };
-      const violations = canPlace(
-        testPlan,
-        newId,
-        {},
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length === 0) {
-        placedBuilding = candidateBuilding;
-        break;
-      }
-    }
-
-    if (!placedBuilding) return false;
-
-    const finalBuilding = placedBuilding;
-    this.commandStack.execute({
-      name: `Paste Building ${finalBuilding.label}`,
-      execute: () => {
-        this.floorplan.buildings.push(finalBuilding);
-      },
-      undo: () => {
-        const idx = this.floorplan.buildings.findIndex((b) => b.id === newId);
-        if (idx >= 0) this.floorplan.buildings.splice(idx, 1);
-      },
-    });
-    this.emitChange();
-    this.selectNodes([newId]);
-    return true;
-  }
-
-  private pasteZone(
-    original: Zone,
-    targetBuilding: Building,
-    offset: Vec2
-  ): boolean {
-    const newId = NumberingService.nextZoneId();
-    const bbox = polygonBoundingBox(original.points);
-    const zWidth = Math.round(bbox.width || 120);
-    const zHeight = Math.round(bbox.height || 80);
-
-    const newZoneTemplate: Zone = {
-      ...original,
-      id: newId,
-      position: { ...original.position },
-      points: original.points.map((p) => ({ ...p })),
-    };
-
-    const candidateOffsets: Vec2[] = [
-      offset,
-      { x: 0, y: 0 },
-      { x: 0, y: zHeight + 20 },
-      { x: zWidth + 20, y: 0 },
-      { x: -(zWidth + 20), y: 0 },
-      { x: 0, y: -(zHeight + 20) },
-      { x: zWidth + 20, y: zHeight + 20 },
-      { x: 30, y: 30 },
-      { x: 60, y: 60 },
-    ];
-
-    let placedZone: Zone | null = null;
-    for (const cand of candidateOffsets) {
-      const newPos = this.snap({
-        x: original.position.x + cand.x,
-        y: original.position.y + cand.y,
-      });
-      const candidateZone: Zone = { ...newZoneTemplate, position: newPos };
-
-      if (!this.rules.enforce) {
-        placedZone = candidateZone;
-        break;
-      }
-
-      const testPlan: Floorplan = {
-        ...this.floorplan,
-        buildings: this.floorplan.buildings.map((b) =>
-          b.id === targetBuilding.id
-            ? { ...b, zones: [...(b.zones ?? []), candidateZone] }
-            : b
-        ),
-      };
-      const violations = canPlace(
-        testPlan,
-        newId,
-        {},
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length === 0) {
-        placedZone = candidateZone;
-        break;
-      }
-    }
-
-    if (!placedZone) return false;
-
-    const finalZone = placedZone;
-    this.commandStack.execute({
-      name: `Paste Zone ${newId}`,
-      execute: () => {
-        targetBuilding.zones.push(finalZone);
-      },
-      undo: () => {
-        const idx = targetBuilding.zones.findIndex((z) => z.id === newId);
-        if (idx >= 0) targetBuilding.zones.splice(idx, 1);
-      },
-    });
-    this.emitChange();
-    this.selectNodes([newId]);
-    return true;
-  }
-
-  private pasteRow(
-    original: Row,
-    targetBuilding: Building,
-    offset: Vec2
-  ): boolean {
-    const newId = NumberingService.nextRowId();
-    const nextLetter = NumberingService.rowLabel(targetBuilding.rows.length);
-
-    const clonedSeats = original.seats.map((s) => ({
-      ...s,
-      id: NumberingService.nextSeatId(),
-    }));
-
-    const newRowTemplate: Row = {
-      ...original,
-      id: newId,
-      label: nextLetter,
-      seats: clonedSeats,
-      position: { ...original.position },
-    };
-    newRowTemplate.seats = NumberingService.renumberRowSeats(newRowTemplate);
-
-    const rowHeight =
-      (original.tableWidth ?? 28) + (original.seatRadius ?? 14) * 4;
-    const verticalStep = Math.max(70, Math.round(rowHeight + 10));
-
-    const existingRows = targetBuilding.rows ?? [];
-    const maxY =
-      existingRows.length > 0
-        ? Math.max(...existingRows.map((r) => r.position.y))
-        : original.position.y;
-    const minY =
-      existingRows.length > 0
-        ? Math.min(...existingRows.map((r) => r.position.y))
-        : original.position.y;
-
-    const candidatePositions: Vec2[] = [
-      { x: original.position.x, y: maxY + verticalStep },
-      { x: original.position.x + offset.x, y: original.position.y + offset.y },
-      { x: original.position.x, y: original.position.y },
-      { x: original.position.x, y: minY - verticalStep },
-      { x: original.position.x, y: original.position.y + verticalStep },
-      { x: original.position.x, y: original.position.y + verticalStep * 2 },
-      { x: original.position.x, y: original.position.y + verticalStep * 3 },
-      { x: original.position.x, y: original.position.y - verticalStep },
-      { x: original.position.x, y: original.position.y - verticalStep * 2 },
-      { x: original.position.x + 80, y: maxY + verticalStep },
-      { x: original.position.x - 80, y: maxY + verticalStep },
-    ];
-
-    let placedRow: Row | null = null;
-    for (const candPos of candidatePositions) {
-      const snappedPos = this.snap(candPos);
-      const candidateRow: Row = { ...newRowTemplate, position: snappedPos };
-
-      if (!this.rules.enforce) {
-        placedRow = candidateRow;
-        break;
-      }
-
-      const testPlan: Floorplan = {
-        ...this.floorplan,
-        buildings: this.floorplan.buildings.map((b) =>
-          b.id === targetBuilding.id
-            ? { ...b, rows: [...(b.rows ?? []), candidateRow] }
-            : b
-        ),
-      };
-      const violations = canPlace(
-        testPlan,
-        newId,
-        {},
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length === 0) {
-        placedRow = candidateRow;
-        break;
-      }
-    }
-
-    if (!placedRow) return false;
-
-    const finalRow = placedRow;
-    this.commandStack.execute({
-      name: `Paste Row ${nextLetter}`,
-      execute: () => {
-        targetBuilding.rows.push(finalRow);
-      },
-      undo: () => {
-        const idx = targetBuilding.rows.findIndex((r) => r.id === newId);
-        if (idx >= 0) targetBuilding.rows.splice(idx, 1);
-      },
-    });
-    this.emitChange();
-    this.selectNodes([newId]);
-    return true;
+    return this.clipboardOps.canPaste();
   }
 
   public paste(
     targetBuildingId?: string,
     offset: Vec2 = { x: 30, y: 30 }
   ): boolean {
-    if (!this.clipboard) return false;
-
-    if (this.clipboard.type === 'building') {
-      return this.pasteBuilding(this.clipboard.data, offset);
-    }
-
-    const targetBuilding = this.resolveTargetBuilding(targetBuildingId);
-    if (!targetBuilding) return false;
-
-    if (this.clipboard.type === 'zone') {
-      return this.pasteZone(this.clipboard.data, targetBuilding, offset);
-    }
-
-    if (this.clipboard.type === 'row') {
-      return this.pasteRow(this.clipboard.data, targetBuilding, offset);
-    }
-
-    return false;
+    return this.clipboardOps.paste(targetBuildingId, offset);
   }
 
   public duplicateNode(nodeId: string): boolean {
-    this.selectNodes([nodeId]);
-    if (this.copySelection()) {
-      return this.paste();
-    }
-    return false;
+    return this.clipboardOps.duplicateNode(nodeId);
   }
+
+  // --- shapes (./operations/shapes.ts) ---
 
   public flipNode(
     nodeId: string,
     direction: 'horizontal' | 'vertical'
   ): boolean {
-    const building = this.floorplan.buildings.find((b) => b.id === nodeId);
-    if (building) {
-      const oldPoints = building.points.map((p) => ({ ...p }));
-      const oldRows = [...building.rows];
-      const oldZones = [...building.zones];
+    return this.shapeOps.flipNode(nodeId, direction);
+  }
 
-      const flippedPoints = flipPolygon(building.points, direction);
-      const centroid = polygonCentroid(building.points);
+  public scaleShape(nodeId: string, scaleX: number, scaleY: number): boolean {
+    return this.shapeOps.scaleShape(nodeId, scaleX, scaleY);
+  }
 
-      const flippedRows: Row[] = building.rows.map((r) => {
-        const newPos =
-          direction === 'horizontal'
-            ? { x: 2 * centroid.x - r.position.x, y: r.position.y }
-            : { x: r.position.x, y: 2 * centroid.y - r.position.y };
-        const newRot =
-          direction === 'horizontal'
-            ? (180 - r.rotation + 360) % 360
-            : (360 - r.rotation) % 360;
-        return {
-          ...r,
-          position: this.snap(newPos),
-          rotation: newRot,
-        };
-      });
+  public setShapeDimensions(
+    nodeId: string,
+    width: number,
+    height: number
+  ): boolean {
+    return this.shapeOps.setShapeDimensions(nodeId, width, height);
+  }
 
-      const flippedZones: Zone[] = building.zones.map((z) => {
-        const newPos =
-          direction === 'horizontal'
-            ? { x: 2 * centroid.x - z.position.x, y: z.position.y }
-            : { x: z.position.x, y: 2 * centroid.y - z.position.y };
-        const newRot =
-          direction === 'horizontal'
-            ? (180 - z.rotation + 360) % 360
-            : (360 - z.rotation) % 360;
-        return {
-          ...z,
-          position: this.snap(newPos),
-          rotation: newRot,
-          points: flipPolygon(z.points, direction),
-        };
-      });
+  public moveVertex(
+    polygonNodeId: string,
+    vertexIndex: number,
+    newPosition: Vec2
+  ): boolean {
+    return this.shapeOps.moveVertex(polygonNodeId, vertexIndex, newPosition);
+  }
 
-      const proposedBuilding: Building = {
-        ...building,
-        points: flippedPoints,
-        rows: flippedRows,
-        zones: flippedZones,
-      };
+  public addVertex(
+    polygonNodeId: string,
+    afterIndex: number,
+    newPoint: Vec2
+  ): boolean {
+    return this.shapeOps.addVertex(polygonNodeId, afterIndex, newPoint);
+  }
 
-      if (this.rules.enforce) {
-        const testPlan: Floorplan = {
-          ...this.floorplan,
-          buildings: this.floorplan.buildings.map((b) =>
-            b.id === nodeId ? proposedBuilding : b
-          ),
-        };
-        const violations = canPlace(
-          testPlan,
-          nodeId,
-          {},
-          { tolerance: this.rules.tolerance }
-        );
-        if (violations.length > 0) return false;
-      }
-
-      this.commandStack.execute({
-        name: `Flip Building ${building.label} ${direction}`,
-        execute: () => {
-          building.points = flippedPoints;
-          building.rows = flippedRows;
-          building.zones = flippedZones;
-        },
-        undo: () => {
-          building.points = oldPoints;
-          building.rows = oldRows;
-          building.zones = oldZones;
-        },
-      });
-      this.emitChange();
-      return true;
-    }
-
-    for (const b of this.floorplan.buildings) {
-      const zone = (b.zones ?? []).find((z) => z.id === nodeId);
-      if (zone) {
-        const oldPoints = zone.points.map((p) => ({ ...p }));
-        const flippedPoints = flipPolygon(zone.points, direction);
-
-        if (this.rules.enforce) {
-          const testPlan: Floorplan = {
-            ...this.floorplan,
-            buildings: this.floorplan.buildings.map((bItem) =>
-              bItem.id === b.id
-                ? {
-                    ...bItem,
-                    zones: bItem.zones.map((z) =>
-                      z.id === nodeId ? { ...z, points: flippedPoints } : z
-                    ),
-                  }
-                : bItem
-            ),
-          };
-          const violations = canPlace(
-            testPlan,
-            nodeId,
-            {},
-            { tolerance: this.rules.tolerance }
-          );
-          if (violations.length > 0) return false;
-        }
-
-        this.commandStack.execute({
-          name: `Flip Zone ${zone.id} ${direction}`,
-          execute: () => {
-            zone.points = flippedPoints;
-          },
-          undo: () => {
-            zone.points = oldPoints;
-          },
-        });
-        this.emitChange();
-        return true;
-      }
-
-      const row = (b.rows ?? []).find((r) => r.id === nodeId);
-      if (row) {
-        const oldRot = row.rotation;
-        const newRot =
-          direction === 'horizontal'
-            ? (180 - row.rotation + 360) % 360
-            : (360 - row.rotation) % 360;
-
-        if (this.rules.enforce) {
-          const violations = canPlace(
-            this.floorplan,
-            nodeId,
-            { rotation: newRot },
-            { tolerance: this.rules.tolerance }
-          );
-          if (violations.length > 0) return false;
-        }
-
-        this.commandStack.execute({
-          name: `Flip Row ${row.label} ${direction}`,
-          execute: () => {
-            row.rotation = newRot;
-          },
-          undo: () => {
-            row.rotation = oldRot;
-          },
-        });
-        this.emitChange();
-        return true;
-      }
-    }
-
-    return false;
+  public deleteVertex(polygonNodeId: string, vertexIndex: number): boolean {
+    return this.shapeOps.deleteVertex(polygonNodeId, vertexIndex);
   }
 
   public updateNodeLabel(nodeId: string, label: string): boolean {
@@ -2274,259 +1229,6 @@ export class Editor implements EditorInstance {
       }
     }
     return false;
-  }
-
-  public scaleShape(nodeId: string, scaleX: number, scaleY: number): boolean {
-    if (scaleX <= 0 || scaleY <= 0) return false;
-
-    const building = this.floorplan.buildings.find((b) => b.id === nodeId);
-    if (building) {
-      const oldPoints = building.points.map((p) => ({ ...p }));
-      const scaled = scalePolygon(building.points, scaleX, scaleY);
-
-      if (this.rules.enforce) {
-        const testPlan: Floorplan = {
-          ...this.floorplan,
-          buildings: this.floorplan.buildings.map((b) =>
-            b.id === nodeId ? { ...b, points: scaled } : b
-          ),
-        };
-        const violations = canPlace(
-          testPlan,
-          nodeId,
-          {},
-          { tolerance: this.rules.tolerance }
-        );
-        if (violations.length > 0) return false;
-      }
-
-      this.commandStack.execute({
-        name: `Scale Building ${building.label}`,
-        execute: () => {
-          building.points = scaled;
-        },
-        undo: () => {
-          building.points = oldPoints;
-        },
-      });
-      this.emitChange();
-      return true;
-    }
-
-    for (const b of this.floorplan.buildings) {
-      const zone = (b.zones ?? []).find((z) => z.id === nodeId);
-      if (zone) {
-        const oldPoints = zone.points.map((p) => ({ ...p }));
-        const scaled = scalePolygon(zone.points, scaleX, scaleY);
-
-        if (this.rules.enforce) {
-          const testPlan: Floorplan = {
-            ...this.floorplan,
-            buildings: this.floorplan.buildings.map((bItem) =>
-              bItem.id === b.id
-                ? {
-                    ...bItem,
-                    zones: bItem.zones.map((z) =>
-                      z.id === nodeId ? { ...z, points: scaled } : z
-                    ),
-                  }
-                : bItem
-            ),
-          };
-          const violations = canPlace(
-            testPlan,
-            nodeId,
-            {},
-            { tolerance: this.rules.tolerance }
-          );
-          if (violations.length > 0) return false;
-        }
-
-        this.commandStack.execute({
-          name: `Scale Zone ${zone.id}`,
-          execute: () => {
-            zone.points = scaled;
-          },
-          undo: () => {
-            zone.points = oldPoints;
-          },
-        });
-        this.emitChange();
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  public setShapeDimensions(
-    nodeId: string,
-    width: number,
-    height: number
-  ): boolean {
-    if (width <= 0 || height <= 0) return false;
-
-    let points: Vec2[] | undefined;
-    const b = this.floorplan.buildings.find((b) => b.id === nodeId);
-    if (b) {
-      points = b.points;
-    } else {
-      for (const building of this.floorplan.buildings) {
-        const z = (building.zones ?? []).find((zone) => zone.id === nodeId);
-        if (z) {
-          points = z.points;
-          break;
-        }
-      }
-    }
-
-    if (!points || points.length === 0) return false;
-    const bbox = polygonBoundingBox(points);
-    if (bbox.width <= 0 || bbox.height <= 0) return false;
-
-    const scaleX = width / bbox.width;
-    const scaleY = height / bbox.height;
-    return this.scaleShape(nodeId, scaleX, scaleY);
-  }
-
-  // ----------------------------------------------------
-  // Polygon Vertex Editing (Buildings and Zones)
-  // ----------------------------------------------------
-
-  private findPolygonNode(
-    nodeId: string
-  ): { points: Vec2[]; label: string } | null {
-    const b = this.floorplan.buildings.find((b) => b.id === nodeId);
-    if (b) return { points: b.points, label: b.label };
-
-    for (const building of this.floorplan.buildings) {
-      const z = (building.zones ?? []).find((zone) => zone.id === nodeId);
-      if (z) return { points: z.points, label: z.id };
-    }
-    return null;
-  }
-
-  public moveVertex(
-    polygonNodeId: string,
-    vertexIndex: number,
-    newPosition: Vec2
-  ): boolean {
-    const node = this.findPolygonNode(polygonNodeId);
-    if (!node || vertexIndex < 0 || vertexIndex >= node.points.length) {
-      return false;
-    }
-
-    const snapped = this.snap(newPosition);
-    const proposed = node.points.map((pt, i) =>
-      i === vertexIndex ? snapped : pt
-    );
-
-    if (this.rules.enforce) {
-      const violations = canPlace(
-        this.floorplan,
-        polygonNodeId,
-        { points: proposed },
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) return false;
-    }
-
-    const oldPoints = [...node.points];
-    this.commandStack.execute({
-      name: `Move Vertex ${vertexIndex} of ${node.label}`,
-      execute: () => {
-        node.points.length = 0;
-        node.points.push(...proposed);
-      },
-      undo: () => {
-        node.points.length = 0;
-        node.points.push(...oldPoints);
-      },
-    });
-
-    this.emitChange();
-    return true;
-  }
-
-  public addVertex(
-    polygonNodeId: string,
-    afterIndex: number,
-    newPoint: Vec2
-  ): boolean {
-    const node = this.findPolygonNode(polygonNodeId);
-    if (!node || afterIndex < 0 || afterIndex >= node.points.length) {
-      return false;
-    }
-
-    const snapped = this.snap(newPoint);
-    const proposed = [...node.points];
-    proposed.splice(afterIndex + 1, 0, snapped);
-
-    if (this.rules.enforce) {
-      const violations = canPlace(
-        this.floorplan,
-        polygonNodeId,
-        { points: proposed },
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) return false;
-    }
-
-    const oldPoints = [...node.points];
-    this.commandStack.execute({
-      name: `Add Vertex to ${node.label}`,
-      execute: () => {
-        node.points.length = 0;
-        node.points.push(...proposed);
-      },
-      undo: () => {
-        node.points.length = 0;
-        node.points.push(...oldPoints);
-      },
-    });
-
-    this.emitChange();
-    return true;
-  }
-
-  public deleteVertex(polygonNodeId: string, vertexIndex: number): boolean {
-    const node = this.findPolygonNode(polygonNodeId);
-    if (!node || vertexIndex < 0 || vertexIndex >= node.points.length) {
-      return false;
-    }
-
-    // A polygon must retain at least 3 vertices
-    if (node.points.length <= 3) {
-      return false;
-    }
-
-    const proposed = node.points.filter((_, i) => i !== vertexIndex);
-
-    if (this.rules.enforce) {
-      const violations = canPlace(
-        this.floorplan,
-        polygonNodeId,
-        { points: proposed },
-        { tolerance: this.rules.tolerance }
-      );
-      if (violations.length > 0) return false;
-    }
-
-    const oldPoints = [...node.points];
-    this.commandStack.execute({
-      name: `Delete Vertex ${vertexIndex} from ${node.label}`,
-      execute: () => {
-        node.points.length = 0;
-        node.points.push(...proposed);
-      },
-      undo: () => {
-        node.points.length = 0;
-        node.points.push(...oldPoints);
-      },
-    });
-
-    this.emitChange();
-    return true;
   }
 
   public on<K extends keyof EditorEvents>(
