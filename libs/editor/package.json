@@ -1,0 +1,21 @@
+{
+  "name": "@open-seats/editor",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "dependencies": {
+    "@open-seats/core": "0.0.1",
+    "@open-seats/renderer": "0.0.1",
+    "@open-seats/viewer": "0.0.1"
+  }
+}

@@ -1,0 +1,1075 @@
+<div class="seats-editor-layout">
+  <!-- 1. LEFT PANEL: TOOLS & EDITIONS -->
+  @if (showToolbar()) {
+    <aside class="editor-sidebar editor-left-panel">
+      <!-- Tools & History -->
+      <div class="panel-section">
+        <div class="section-title">Canvas Tools</div>
+        <div class="tool-grid">
+          <button
+            class="tool-btn"
+            [class.active]="currentTool === 'select'"
+            (click)="setTool('select')"
+            title="Select and drag objects"
+          >
+            Select
+          </button>
+          <button
+            class="tool-btn"
+            [class.active]="currentTool === 'pan'"
+            (click)="setTool('pan')"
+            title="Pan canvas"
+          >
+            Pan
+          </button>
+          <button
+            class="tool-btn"
+            [class.active]="currentTool === 'building'"
+            (click)="setTool('building')"
+            title="Draw building outline"
+          >
+            Draw Building
+          </button>
+        </div>
+
+        <div class="btn-group" style="margin-top: 8px">
+          <button
+            class="btn"
+            style="flex: 1"
+            (click)="undo()"
+            [disabled]="!canUndo()"
+            title="Undo (Ctrl+Z)"
+          >
+            Undo
+          </button>
+          <button
+            class="btn"
+            style="flex: 1"
+            (click)="redo()"
+            [disabled]="!canRedo()"
+            title="Redo (Ctrl+Y)"
+          >
+            Redo
+          </button>
+        </div>
+
+        <button
+          class="btn preview-btn"
+          [class.btn-primary]="!isPreviewActive"
+          (click)="togglePreview()"
+          style="width: 100%; margin-top: 8px"
+        >
+          {{ isPreviewActive ? 'Exit Preview' : 'Preview Mode' }}
+        </button>
+      </div>
+
+      <!-- Context Actions -->
+      <div class="panel-section">
+        <div class="section-title">Context Actions</div>
+        <div class="context-action-grid">
+          <button
+            class="context-btn"
+            [disabled]="!selectedNodeId"
+            (click)="copySelected()"
+            title="Copy selected item (Ctrl+C)"
+          >
+            Copy
+          </button>
+          <button
+            class="context-btn"
+            [disabled]="!selectedNodeId"
+            (click)="cutSelected()"
+            title="Cut selected item (Ctrl+X)"
+          >
+            Cut
+          </button>
+          <button
+            class="context-btn"
+            [disabled]="!canPaste()"
+            (click)="paste()"
+            title="Paste from clipboard (Ctrl+V)"
+          >
+            Paste
+          </button>
+          <button
+            class="context-btn"
+            [disabled]="!selectedNodeId"
+            (click)="duplicateSelected()"
+            title="Duplicate selected item (Ctrl+D)"
+          >
+            Duplicate
+          </button>
+        </div>
+      </div>
+
+      <!-- Editions Tabs Header -->
+      <div class="panel-section editions-section">
+        <div class="section-title">Editions Panel</div>
+        <div class="tab-switcher">
+          <button
+            class="tab-btn"
+            [class.active]="editionsTab === 'buildings'"
+            (click)="editionsTab = 'buildings'"
+          >
+            Buildings
+          </button>
+          <button
+            class="tab-btn"
+            [class.active]="editionsTab === 'zones'"
+            (click)="editionsTab = 'zones'"
+          >
+            Zones
+          </button>
+          <button
+            class="tab-btn"
+            [class.active]="editionsTab === 'rows'"
+            (click)="editionsTab = 'rows'"
+          >
+            Rows
+          </button>
+        </div>
+
+        <div class="tab-content">
+          <!-- 1. BUILDINGS EDITION -->
+          @if (editionsTab === 'buildings') {
+            <div class="edition-card">
+              <div class="edition-header">
+                <span class="edition-badge building-badge">BUILDING</span>
+                <span class="edition-title">Create Building</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Shape Mode</label>
+                <div class="toggle-group">
+                  <button
+                    class="toggle-btn"
+                    [class.active]="buildingDrawMode === 'draw'"
+                    (click)="buildingDrawMode = 'draw'"
+                  >
+                    Draw Outline
+                  </button>
+                  <button
+                    class="toggle-btn"
+                    [class.active]="buildingDrawMode === 'rect'"
+                    (click)="buildingDrawMode = 'rect'"
+                  >
+                    Rectangle
+                  </button>
+                </div>
+              </div>
+
+              @if (buildingDrawMode === 'draw') {
+                <div class="draw-building-info-card">
+                  <div class="draw-status-row">
+                    <span
+                      class="status-indicator"
+                      [class.active]="
+                        isDrawingBuilding && buildingCreationMode === 'outline'
+                      "
+                    ></span>
+                    <span class="draw-status-text">
+                      {{
+                        isDrawingBuilding && buildingCreationMode === 'outline'
+                          ? 'Outline drawing active'
+                          : 'Click on floorplan to draw'
+                      }}
+                    </span>
+                  </div>
+                  <p class="draw-help-text">
+                    Click anywhere on the floorplan to create building edges.
+                    After placing 3 or more points, click on an existing point
+                    to close and save the building.
+                  </p>
+                  @if (
+                    isDrawingBuilding && buildingCreationMode === 'outline'
+                  ) {
+                    <div class="points-counter-badge">
+                      Points placed: <strong>{{ draftPointsCount }}</strong>
+                      @if (draftPointsCount >= 3) {
+                        <span class="ready-badge">✓ Ready to close!</span>
+                      }
+                    </div>
+                  }
+                </div>
+              } @else {
+                <div class="draw-building-info-card">
+                  <div class="draw-status-row">
+                    <span
+                      class="status-indicator"
+                      [class.active]="
+                        isDrawingBuilding &&
+                        buildingCreationMode === 'rectangle'
+                      "
+                    ></span>
+                    <span class="draw-status-text">
+                      {{
+                        isDrawingBuilding &&
+                        buildingCreationMode === 'rectangle'
+                          ? 'Rectangle creation active'
+                          : 'Interactive 2-corner placement'
+                      }}
+                    </span>
+                  </div>
+                  <p class="draw-help-text">
+                    Click on the floorplan to set the first corner, then move
+                    and click the opposite corner to form the rectangular
+                    building.
+                  </p>
+                  @if (
+                    isDrawingBuilding && buildingCreationMode === 'rectangle'
+                  ) {
+                    <div class="points-counter-badge">
+                      @if (draftPointsCount === 0) {
+                        Click 1st corner
+                      } @else {
+                        Corner 1 placed —
+                        <span class="ready-badge"
+                          >✓ Click opposite corner to save!</span
+                        >
+                      }
+                    </div>
+                  }
+                </div>
+              }
+
+              <div class="form-group">
+                <label class="form-label">Label / Name</label>
+                <input
+                  type="text"
+                  class="form-input"
+                  [value]="newBuildingLabel"
+                  (input)="newBuildingLabel = $any($event.target).value"
+                  placeholder="e.g. Grand Auditorium"
+                />
+              </div>
+
+              <button
+                class="btn"
+                [class.btn-primary]="!isDrawingBuilding"
+                [class.btn-danger]="isDrawingBuilding"
+                style="width: 100%; margin-top: 6px"
+                (click)="createBuildingFromForm()"
+              >
+                @if (isDrawingBuilding) {
+                  ✕ Cancel Drawing
+                } @else if (buildingDrawMode === 'rect') {
+                  📐 Draw Rectangle (2 Corners)
+                } @else {
+                  ✏️ Start Drawing Outline
+                }
+              </button>
+            </div>
+          }
+
+          <!-- 2. ZONES EDITION -->
+          @if (editionsTab === 'zones') {
+            <div class="edition-card">
+              <div class="edition-header">
+                <span class="edition-badge zone-badge">ZONE</span>
+                <span class="edition-title">Create Zone</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Target Building</label>
+                <select
+                  class="form-select"
+                  [value]="
+                    zoneTargetBuildingId ||
+                    selectedBuilding?.id ||
+                    currentFloorplan?.buildings?.[0]?.id
+                  "
+                  (change)="zoneTargetBuildingId = $any($event.target).value"
+                >
+                  @for (b of currentFloorplan?.buildings ?? []; track b.id) {
+                    <option [value]="b.id">
+                      {{ b.label }} ({{ b.zones.length }} zones)
+                    </option>
+                  }
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Zone Name</label>
+                <input
+                  type="text"
+                  class="form-input"
+                  [value]="newZoneLabel"
+                  (input)="newZoneLabel = $any($event.target).value"
+                  placeholder="e.g. VIP Lounge"
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Fill Color</label>
+                <div class="color-swatches">
+                  @for (preset of zoneColorPresets; track preset.name) {
+                    <button
+                      class="color-swatch-btn"
+                      [style.background-color]="preset.color"
+                      [class.selected]="newZoneFill === preset.color"
+                      (click)="newZoneFill = preset.color"
+                      [title]="preset.name"
+                    ></button>
+                  }
+                  <input
+                    type="color"
+                    class="color-picker-input"
+                    [value]="newZoneFill"
+                    (input)="newZoneFill = $any($event.target).value"
+                  />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group" style="flex: 1">
+                  <label class="form-label">Width (px)</label>
+                  <input
+                    type="number"
+                    class="form-input"
+                    [value]="newZoneWidth"
+                    (input)="newZoneWidth = +$any($event.target).value"
+                    min="40"
+                    step="10"
+                  />
+                </div>
+                <div class="form-group" style="flex: 1">
+                  <label class="form-label">Height (px)</label>
+                  <input
+                    type="number"
+                    class="form-input"
+                    [value]="newZoneHeight"
+                    (input)="newZoneHeight = +$any($event.target).value"
+                    min="40"
+                    step="10"
+                  />
+                </div>
+              </div>
+
+              <button
+                class="btn btn-primary"
+                style="width: 100%; margin-top: 6px"
+                (click)="createZoneFromForm()"
+              >
+                + Create Zone
+              </button>
+            </div>
+          }
+
+          <!-- 3. ROWS EDITION -->
+          @if (editionsTab === 'rows') {
+            <div class="edition-card">
+              <div class="edition-header">
+                <span class="edition-badge row-badge">ROW</span>
+                <span class="edition-title">Create Row</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Target Building</label>
+                <select
+                  class="form-select"
+                  [value]="
+                    rowTargetBuildingId ||
+                    selectedBuilding?.id ||
+                    currentFloorplan?.buildings?.[0]?.id
+                  "
+                  (change)="rowTargetBuildingId = $any($event.target).value"
+                >
+                  @for (b of currentFloorplan?.buildings ?? []; track b.id) {
+                    <option [value]="b.id">
+                      {{ b.label }} ({{ b.rows.length }} rows)
+                    </option>
+                  }
+                </select>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group" style="flex: 1">
+                  <label class="form-label">Seats</label>
+                  <input
+                    type="number"
+                    class="form-input"
+                    [value]="newRowSeatCount"
+                    (input)="newRowSeatCount = +$any($event.target).value"
+                    min="1"
+                    max="40"
+                  />
+                </div>
+                <div class="form-group" style="flex: 1">
+                  <label class="form-label">Side</label>
+                  <select
+                    class="form-select"
+                    [value]="newRowSide"
+                    (change)="newRowSide = $any($event.target).value"
+                  >
+                    <option value="both">Both sides</option>
+                    <option value="one">Single side</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group" style="flex: 1">
+                  <label class="form-label">Spacing</label>
+                  <input
+                    type="number"
+                    class="form-input"
+                    [value]="newRowSeatSpacing"
+                    (input)="newRowSeatSpacing = +$any($event.target).value"
+                    min="28"
+                    step="2"
+                  />
+                </div>
+                <div class="form-group" style="flex: 1">
+                  <label class="form-label">Radius</label>
+                  <input
+                    type="number"
+                    class="form-input"
+                    [value]="newRowSeatRadius"
+                    (input)="newRowSeatRadius = +$any($event.target).value"
+                    min="8"
+                    step="1"
+                  />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group" style="flex: 1">
+                  <label class="form-label">Table Width</label>
+                  <input
+                    type="number"
+                    class="form-input"
+                    [value]="newRowTableWidth"
+                    (input)="newRowTableWidth = +$any($event.target).value"
+                    min="0"
+                    step="2"
+                  />
+                </div>
+                <div class="form-group" style="flex: 1">
+                  <label class="form-label">Rotation (°)</label>
+                  <input
+                    type="number"
+                    class="form-input"
+                    [value]="newRowRotation"
+                    (input)="newRowRotation = +$any($event.target).value"
+                    min="0"
+                    max="360"
+                    step="15"
+                  />
+                </div>
+              </div>
+
+              <button
+                class="btn btn-primary"
+                style="width: 100%; margin-top: 6px"
+                (click)="createRowFromForm()"
+              >
+                + Create Row
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </aside>
+  }
+
+  <!-- 2. CENTER CANVAS CONTAINER -->
+  <main class="editor-main-area seats-editor-canvas-area">
+    <!-- Drawing Building Guidance Pill -->
+    @if (isDrawingBuilding) {
+      <div
+        class="drawing-guidance-pill"
+        [class.has-error]="buildingCreationError"
+      >
+        <span class="pill-dot"></span>
+        <span class="pill-icon">{{
+          buildingCreationError
+            ? '⚠️'
+            : buildingCreationMode === 'rectangle'
+              ? '📐'
+              : '✏️'
+        }}</span>
+        <span class="pill-text">
+          @if (buildingCreationError) {
+            <strong class="text-danger">{{ buildingCreationError }}</strong>
+            Click on an open area to place the 1st corner.
+          } @else if (buildingCreationMode === 'rectangle') {
+            @if (draftPointsCount === 0) {
+              Click on the floorplan to place the <strong>1st corner</strong> of
+              the rectangle.
+            } @else {
+              1st corner placed — Move and click the
+              <strong>opposite corner</strong> to finish rectangle!
+            }
+          } @else {
+            @if (draftPointsCount === 0) {
+              Click on the floorplan to place the 1st corner of the building.
+            } @else if (draftPointsCount < 3) {
+              Click to place corners (<strong>{{ draftPointsCount }}</strong>
+              placed, need 3+ to close).
+            } @else {
+              <strong>{{ draftPointsCount }}</strong> points placed — Click on
+              an existing point to close and save building!
+            }
+          }
+        </span>
+        <button
+          class="pill-cancel-btn"
+          (click)="cancelBuildingCreation()"
+          title="Cancel drawing (Esc)"
+        >
+          ✕ Cancel
+        </button>
+      </div>
+    }
+
+    <!-- Layout Violations Banner -->
+    @if (lastViolations.length > 0) {
+      <div class="violations-banner">
+        <span class="warning-icon">⚠</span>
+        <span>
+          Layout Warning: {{ lastViolations.length }} violation(s) detected ({{
+            lastViolations[0].rule
+          }}
+          on {{ lastViolations[0].ids.join(', ') }})
+        </span>
+      </div>
+    }
+
+    <!-- Canvas Floating Context Bar -->
+    @if (showFloatingBar() && selectedNodeId) {
+      <div class="canvas-context-bar">
+        <div class="context-bar-info">
+          <span class="context-type-badge">{{
+            selectedNodeType | uppercase
+          }}</span>
+          @if (selectedNodeType === 'building') {
+            <span>{{ selectedBuilding?.label }}</span>
+          } @else if (selectedNodeType === 'zone') {
+            <span>{{
+              selectedZone?.zone?.text?.value || selectedZone?.zone?.id
+            }}</span>
+          } @else if (selectedNodeType === 'row') {
+            <span
+              >Row {{ selectedRow?.row?.label }} ({{
+                selectedRow?.row?.seats?.length
+              }}
+              seats)</span
+            >
+          }
+        </div>
+
+        <div class="context-bar-divider"></div>
+
+        <button
+          class="context-icon-btn"
+          (click)="copySelected()"
+          title="Copy (Ctrl+C)"
+        >
+          Copy
+        </button>
+        <button
+          class="context-icon-btn"
+          (click)="cutSelected()"
+          title="Cut (Ctrl+X)"
+        >
+          Cut
+        </button>
+        <button
+          class="context-icon-btn"
+          [disabled]="!canPaste()"
+          (click)="paste()"
+          title="Paste (Ctrl+V)"
+        >
+          Paste
+        </button>
+        <button
+          class="context-icon-btn"
+          (click)="duplicateSelected()"
+          title="Duplicate (Ctrl+D)"
+        >
+          Duplicate
+        </button>
+        <button
+          class="context-icon-btn delete-btn"
+          (click)="deleteSelected()"
+          title="Delete"
+        >
+          Delete
+        </button>
+      </div>
+    }
+
+    <!-- Canvas Mount Container -->
+    <div #container class="seats-editor-canvas-wrapper"></div>
+
+    <!-- On-Canvas Zoom Controls -->
+    <div class="canvas-zoom-controls">
+      <button class="zoom-btn" (click)="zoomIn()" title="Zoom In">+</button>
+      <button class="zoom-btn" (click)="zoomOut()" title="Zoom Out">-</button>
+      <button class="zoom-btn" (click)="resetZoom()" title="Reset Zoom">
+        ⤾
+      </button>
+    </div>
+  </main>
+
+  <!-- 3. RIGHT PANEL: OBJECT PROPERTIES PANEL -->
+  @if (showProperties()) {
+    <aside class="editor-sidebar editor-right-panel">
+      <div class="panel-header">
+        <span>Object Properties</span>
+        @if (selectedNodeId) {
+          <span
+            class="tag active-tag"
+            (click)="clearSelection()"
+            style="cursor: pointer"
+            title="Deselect"
+          >
+            {{ selectedNodeType | uppercase }} ✕
+          </span>
+        } @else {
+          <span class="tag">FLOORPLAN</span>
+        }
+      </div>
+
+      <div class="panel-body">
+        <!-- 1. BUILDING PROPERTIES -->
+        @if (selectedBuilding) {
+          <div class="card prop-card">
+            <div class="prop-card-header">
+              <div class="prop-title">Building Properties</div>
+              <div class="prop-id">{{ selectedBuilding.id }}</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Label / Name</label>
+              <input
+                type="text"
+                class="form-input"
+                [value]="selectedBuilding.label"
+                (input)="updateSelectedLabel($any($event.target).value)"
+              />
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style="flex: 1">
+                <label class="form-label">Position X</label>
+                <input
+                  type="number"
+                  class="form-input"
+                  [value]="selectedBuilding.position.x"
+                  (input)="
+                    updateSelectedPosition(
+                      +$any($event.target).value,
+                      selectedBuilding.position.y
+                    )
+                  "
+                />
+              </div>
+              <div class="form-group" style="flex: 1">
+                <label class="form-label">Position Y</label>
+                <input
+                  type="number"
+                  class="form-input"
+                  [value]="selectedBuilding.position.y"
+                  (input)="
+                    updateSelectedPosition(
+                      selectedBuilding.position.x,
+                      +$any($event.target).value
+                    )
+                  "
+                />
+              </div>
+            </div>
+
+            <!-- Shape Sizing: Width & Height -->
+            @if (selectedShapeDimensions) {
+              <div class="sizing-section">
+                <div class="sub-title">SHAPE SIZE & DIMENSIONS</div>
+                <div class="form-row">
+                  <div class="form-group" style="flex: 1">
+                    <label class="form-label">Width (px)</label>
+                    <input
+                      type="number"
+                      class="form-input"
+                      [value]="selectedShapeDimensions.width"
+                      (change)="updateShapeWidth(+$any($event.target).value)"
+                      min="50"
+                      step="20"
+                    />
+                  </div>
+                  <div class="form-group" style="flex: 1">
+                    <label class="form-label">Height (px)</label>
+                    <input
+                      type="number"
+                      class="form-input"
+                      [value]="selectedShapeDimensions.height"
+                      (change)="updateShapeHeight(+$any($event.target).value)"
+                      min="50"
+                      step="20"
+                    />
+                  </div>
+                </div>
+
+                <div class="btn-group" style="margin-top: 6px">
+                  <button
+                    class="btn btn-sm"
+                    (click)="scaleSelectedShape(0.9)"
+                    title="Scale down 10%"
+                  >
+                    -10%
+                  </button>
+                  <button
+                    class="btn btn-sm"
+                    (click)="scaleSelectedShape(1.1)"
+                    title="Scale up 10%"
+                  >
+                    +10%
+                  </button>
+                </div>
+              </div>
+            }
+
+            <div class="summary-stats-box" style="margin-top: 12px">
+              <div class="stat-item">
+                <span class="stat-num">{{ selectedBuilding.rows.length }}</span>
+                <span class="stat-lbl">Rows</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-num">{{
+                  selectedBuilding.zones.length
+                }}</span>
+                <span class="stat-lbl">Zones</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-num">{{
+                  selectedBuilding.points.length
+                }}</span>
+                <span class="stat-lbl">Vertices</span>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- 2. ZONE PROPERTIES -->
+        @if (selectedZone) {
+          <div class="card prop-card">
+            <div class="prop-card-header">
+              <div class="prop-title">Zone Properties</div>
+              <div class="prop-id">{{ selectedZone.zone.id }}</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Zone Name</label>
+              <input
+                type="text"
+                class="form-input"
+                [value]="selectedZone.zone.text?.value || ''"
+                (input)="updateSelectedLabel($any($event.target).value)"
+                placeholder="Zone label"
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Zone Fill Color</label>
+              <div class="color-swatches">
+                @for (preset of zoneColorPresets; track preset.name) {
+                  <button
+                    class="color-swatch-btn"
+                    [style.background-color]="preset.color"
+                    [class.selected]="selectedZone.zone.fill === preset.color"
+                    (click)="updateZoneFill(preset.color)"
+                    [title]="preset.name"
+                  ></button>
+                }
+                <input
+                  type="color"
+                  class="color-picker-input"
+                  [value]="selectedZone.zone.fill"
+                  (input)="updateZoneFill($any($event.target).value)"
+                />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style="flex: 1">
+                <label class="form-label">Position X</label>
+                <input
+                  type="number"
+                  class="form-input"
+                  [value]="selectedZone.zone.position.x"
+                  (input)="
+                    updateSelectedPosition(
+                      +$any($event.target).value,
+                      selectedZone.zone.position.y
+                    )
+                  "
+                />
+              </div>
+              <div class="form-group" style="flex: 1">
+                <label class="form-label">Position Y</label>
+                <input
+                  type="number"
+                  class="form-input"
+                  [value]="selectedZone.zone.position.y"
+                  (input)="
+                    updateSelectedPosition(
+                      selectedZone.zone.position.x,
+                      +$any($event.target).value
+                    )
+                  "
+                />
+              </div>
+            </div>
+
+            <!-- Shape Sizing: Width & Height -->
+            @if (selectedShapeDimensions) {
+              <div class="sizing-section">
+                <div class="sub-title">SHAPE SIZE & DIMENSIONS</div>
+                <div class="form-row">
+                  <div class="form-group" style="flex: 1">
+                    <label class="form-label">Width (px)</label>
+                    <input
+                      type="number"
+                      class="form-input"
+                      [value]="selectedShapeDimensions.width"
+                      (change)="updateShapeWidth(+$any($event.target).value)"
+                      min="20"
+                      step="10"
+                    />
+                  </div>
+                  <div class="form-group" style="flex: 1">
+                    <label class="form-label">Height (px)</label>
+                    <input
+                      type="number"
+                      class="form-input"
+                      [value]="selectedShapeDimensions.height"
+                      (change)="updateShapeHeight(+$any($event.target).value)"
+                      min="20"
+                      step="10"
+                    />
+                  </div>
+                </div>
+
+                <div class="btn-group" style="margin-top: 6px">
+                  <button class="btn btn-sm" (click)="scaleSelectedShape(0.9)">
+                    -10%
+                  </button>
+                  <button class="btn btn-sm" (click)="scaleSelectedShape(1.1)">
+                    +10%
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- 3. ROW PROPERTIES -->
+        @if (selectedRow) {
+          <div class="card prop-card">
+            <div class="prop-card-header">
+              <div class="prop-title">Row Properties</div>
+              <div class="prop-id">
+                {{ selectedRow.row.id }} ({{ selectedRow.building.label }})
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Row Label</label>
+              <input
+                type="text"
+                class="form-input"
+                [value]="selectedRow.row.label"
+                (input)="updateSelectedLabel($any($event.target).value)"
+              />
+            </div>
+
+            <!-- QUANTITY OF SEATS ADJUSTMENT -->
+            <div class="form-group seat-qty-box">
+              <label
+                class="form-label"
+                style="display: flex; justify-content: space-between"
+              >
+                <span>Quantity of Seats</span>
+                <span class="count-badge"
+                  >{{ selectedRow.row.seats.length }} seats</span
+                >
+              </label>
+              <div class="stepper-group">
+                <button
+                  class="stepper-btn"
+                  (click)="decrementSeatCount()"
+                  [disabled]="selectedRow.row.seats.length <= 1"
+                  title="Remove seat"
+                >
+                  -
+                </button>
+                <input
+                  type="number"
+                  class="form-input stepper-input"
+                  [value]="selectedRow.row.seats.length"
+                  (change)="setRowSeatCount(+$any($event.target).value)"
+                  min="1"
+                  max="60"
+                />
+                <button
+                  class="stepper-btn"
+                  (click)="incrementSeatCount()"
+                  title="Add seat"
+                >
+                  +
+                </button>
+              </div>
+
+              <!-- Seat Quick Presets -->
+              <div class="chip-group" style="margin-top: 8px">
+                @for (qty of [2, 4, 6, 8, 10, 12, 16]; track qty) {
+                  <button
+                    class="chip-btn"
+                    [class.active]="selectedRow.row.seats.length === qty"
+                    (click)="setRowSeatCount(qty)"
+                  >
+                    {{ qty }}
+                  </button>
+                }
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Arrangement Side</label>
+              <div class="toggle-group">
+                <button
+                  class="toggle-btn"
+                  [class.active]="selectedRow.row.side === 'both'"
+                  (click)="setRowSide('both')"
+                >
+                  Both Sides
+                </button>
+                <button
+                  class="toggle-btn"
+                  [class.active]="selectedRow.row.side === 'one'"
+                  (click)="setRowSide('one')"
+                >
+                  Single Side
+                </button>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style="flex: 1">
+                <label class="form-label">Spacing (px)</label>
+                <input
+                  type="number"
+                  class="form-input"
+                  [value]="selectedRow.row.seatSpacing"
+                  (change)="setRowSeatSpacing(+$any($event.target).value)"
+                  min="28"
+                  step="2"
+                />
+              </div>
+              <div class="form-group" style="flex: 1">
+                <label class="form-label">Radius (px)</label>
+                <input
+                  type="number"
+                  class="form-input"
+                  [value]="selectedRow.row.seatRadius"
+                  (change)="setRowSeatRadius(+$any($event.target).value)"
+                  min="8"
+                  step="1"
+                />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Table Width (px)</label>
+              <input
+                type="number"
+                class="form-input"
+                [value]="selectedRow.row.tableWidth"
+                (change)="setRowTableWidth(+$any($event.target).value)"
+                min="0"
+                step="2"
+              />
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style="flex: 1">
+                <label class="form-label">Position X</label>
+                <input
+                  type="number"
+                  class="form-input"
+                  [value]="selectedRow.row.position.x"
+                  (input)="
+                    updateSelectedPosition(
+                      +$any($event.target).value,
+                      selectedRow.row.position.y
+                    )
+                  "
+                />
+              </div>
+              <div class="form-group" style="flex: 1">
+                <label class="form-label">Position Y</label>
+                <input
+                  type="number"
+                  class="form-input"
+                  [value]="selectedRow.row.position.y"
+                  (input)="
+                    updateSelectedPosition(
+                      selectedRow.row.position.x,
+                      +$any($event.target).value
+                    )
+                  "
+                />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Rotation Angle (°)</label>
+              <input
+                type="number"
+                class="form-input"
+                [value]="selectedRow.row.rotation"
+                (input)="updateSelectedRotation(+$any($event.target).value)"
+                min="0"
+                max="360"
+                step="15"
+              />
+            </div>
+          </div>
+        }
+
+        <!-- 4. NO SELECTION: Floorplan Overview -->
+        @if (!selectedNodeId) {
+          <div class="card">
+            <div class="card-title">FLOORPLAN OVERVIEW</div>
+            <div class="stats-grid">
+              <div class="stat-card">
+                <span class="stat-value">{{ totalBuildingsCount }}</span>
+                <span class="stat-name">Buildings</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-value">{{ totalZonesCount }}</span>
+                <span class="stat-name">Zones</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-value">{{ totalRowsCount }}</span>
+                <span class="stat-name">Rows</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-value">{{ totalSeatsCount }}</span>
+                <span class="stat-name">Total Seats</span>
+              </div>
+            </div>
+
+            <div class="help-box" style="margin-top: 14px">
+              <p class="help-title">Selection Tip</p>
+              <p class="help-desc">
+                Click any building, zone, or row on the canvas to inspect and
+                edit its size, seat quantity, and properties.
+              </p>
+            </div>
+          </div>
+        }
+      </div>
+    </aside>
+  }
+</div>

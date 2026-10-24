@@ -1,0 +1,164 @@
+<div class="app-shell">
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <div class="logo-group">
+      <div class="logo-badge">S</div>
+      <div class="brand-info">
+        <span class="brand-title">OpenSeats</span>
+        <span class="tag">Designer & Viewer</span>
+      </div>
+    </div>
+
+    <div class="mode-switcher">
+      <button
+        class="mode-btn"
+        [class.active]="mode === 'viewer'"
+        (click)="setMode('viewer')"
+      >
+        Viewer (Reservation)
+      </button>
+      <button
+        class="mode-btn"
+        [class.active]="mode === 'editor'"
+        (click)="setMode('editor')"
+      >
+        Editor (Designer)
+      </button>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn" (click)="resetZoom()">Reset View</button>
+      <button class="btn btn-primary" (click)="exportJson()">
+        Export JSON
+      </button>
+    </div>
+  </header>
+
+  <!-- 1. EDITOR MODE: Complete visual editor with tools & properties panels built-in -->
+  @if (mode === 'editor') {
+    <seats-editor
+      style="flex: 1; width: 100%; height: calc(100vh - 56px); min-width: 0"
+      [floorplan]="floorplan"
+      (change)="onFloorplanChanged($event)"
+      (selectionChange)="onEditorSelectionChanged($event)"
+      (violationsUpdated)="onViolationsUpdated($event)"
+    ></seats-editor>
+  }
+
+  <!-- 2. VIEWER MODE: Customer reservation experience -->
+  @if (mode === 'viewer') {
+    <div class="main-content">
+      <main class="canvas-area">
+        <div class="canvas-container">
+          <seats-viewer
+            [floorplan]="floorplan"
+            [statuses]="statuses"
+            [maxSelectable]="6"
+            (selectionChanged)="onSelectionChanged($event)"
+            (seatSelected)="onSeatSelected($event)"
+            (seatDeselected)="onSeatDeselected($event)"
+            (seatHovered)="onSeatHovered($event)"
+          ></seats-viewer>
+        </div>
+
+        <!-- Floating Zoom & Pan Controls for Viewer -->
+        <div class="floating-controls">
+          <button class="floating-btn" (click)="zoomIn()" title="Zoom In">
+            +
+          </button>
+          <button class="floating-btn" (click)="zoomOut()" title="Zoom Out">
+            -
+          </button>
+          <button class="floating-btn" (click)="resetZoom()" title="Reset Zoom">
+            ⤾
+          </button>
+        </div>
+      </main>
+
+      <!-- Right Side Panel: Reservation Info & Event stream -->
+      <aside class="side-panel">
+        <div class="panel-header">
+          <span>Reservation Status</span>
+          @if (selectedSeatIds.length > 0) {
+            <span class="tag selected-tag">
+              {{ selectedSeatIds.length }} selected
+            </span>
+          }
+        </div>
+
+        <div class="panel-body">
+          <div class="card legend-card">
+            <div class="card-title">STATUS PALETTE</div>
+            <div class="legend-row">
+              <div class="legend-left">
+                <span class="dot dot-available"></span>
+                <span>Available</span>
+              </div>
+              <span class="count">Selectable</span>
+            </div>
+            <div class="legend-row">
+              <div class="legend-left">
+                <span class="dot dot-selected"></span>
+                <span>Selected</span>
+              </div>
+              <span class="count">{{ selectedSeatIds.length }}</span>
+            </div>
+            <div class="legend-row">
+              <div class="legend-left">
+                <span class="dot dot-reserved"></span>
+                <span>Reserved</span>
+              </div>
+              <span class="count">Unavailable</span>
+            </div>
+            <div class="legend-row">
+              <div class="legend-left">
+                <span class="dot dot-locked"></span>
+                <span>Locked</span>
+              </div>
+              <span class="count">Admin</span>
+            </div>
+          </div>
+
+          @if (selectedSeatIds.length > 0) {
+            <div class="card action-card">
+              <div class="card-title">SELECTED SEATS</div>
+              <div class="seat-tags">
+                @for (label of selectedSeatLabels; track label) {
+                  <span class="seat-badge">
+                    {{ label }}
+                  </span>
+                }
+              </div>
+              <div class="btn-group" style="margin-top: 12px">
+                <button
+                  class="btn btn-primary"
+                  style="flex: 1"
+                  (click)="reserveSelected()"
+                >
+                  Reserve
+                </button>
+                <button class="btn" style="flex: 1" (click)="clearSelection()">
+                  Clear
+                </button>
+              </div>
+            </div>
+          }
+
+          <div class="card">
+            <div class="card-title">EVENT STREAM</div>
+            <div class="event-feed">
+              @for (event of eventLog; track event.id) {
+                <div class="event-row">
+                  <span class="event-time">[{{ event.time }}]</span>
+                  <span class="event-name">{{ event.name }}</span
+                  >:
+                  <span class="event-detail">{{ event.detail }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  }
+</div>

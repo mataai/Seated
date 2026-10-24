@@ -1,0 +1,29 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "../../dist/out-tsc",
+    "declaration": true,
+    "declarationMap": false,
+    "inlineSources": true,
+    "types": [],
+    // The @nx/angular:package executor copies this config into tmp/, so paths
+    // must resolve from a workspace-root baseUrl rather than this file.
+    "baseUrl": "../..",
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "@open-seats/core": ["dist/libs/core/index.d.ts"],
+      "@open-seats/renderer": ["dist/libs/renderer/index.d.ts"],
+      "@open-seats/viewer": ["dist/libs/viewer/index.d.ts"],
+      "@open-seats/editor": ["dist/libs/editor/index.d.ts"]
+    },
+    "moduleResolution": "bundler",
+    "module": "preserve",
+    "lib": ["dom", "es2022"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.spec.ts", "tests/**/*.ts"],
+  "angularCompilerOptions": {
+    "strictTemplates": false
+  }
+}

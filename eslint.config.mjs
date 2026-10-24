@@ -6,9 +6,12 @@ export default [
   ...nx.configs['flat/javascript'],
   {
     ignores: [
-      '**/dist',
+      '**/dist/**',
+      '**/out-tsc/**',
       '**/vite.config.*.timestamp*',
       '**/vitest.config.*.timestamp*',
+      '**/.nx/**',
+      '**/coverage/**',
     ],
   },
   {
@@ -19,28 +22,91 @@ export default [
         {
           enforceBuildableLibDependency: true,
           allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?js$'],
+          // Packages may only depend on the layers below them
           depConstraints: [
+            { sourceTag: 'layer:core', onlyDependOnLibsWithTags: [] },
             {
-              sourceTag: '*',
-              onlyDependOnLibsWithTags: ['*'],
+              sourceTag: 'layer:renderer',
+              onlyDependOnLibsWithTags: ['layer:core'],
             },
+            {
+              sourceTag: 'layer:viewer',
+              onlyDependOnLibsWithTags: ['layer:core', 'layer:renderer'],
+            },
+            {
+              sourceTag: 'layer:editor',
+              onlyDependOnLibsWithTags: [
+                'layer:core',
+                'layer:renderer',
+                'layer:viewer',
+              ],
+            },
+            {
+              sourceTag: 'layer:framework',
+              onlyDependOnLibsWithTags: [
+                'layer:core',
+                'layer:renderer',
+                'layer:viewer',
+                'layer:editor',
+              ],
+            },
+            { sourceTag: 'type:app', onlyDependOnLibsWithTags: ['*'] },
           ],
         },
       ],
     },
   },
   {
-    files: [
-      '**/*.ts',
-      '**/*.tsx',
-      '**/*.cts',
-      '**/*.mts',
-      '**/*.js',
-      '**/*.jsx',
-      '**/*.cjs',
-      '**/*.mjs',
-    ],
-    // Override or add rules here
-    rules: {},
+    files: ['**/*.ts', '**/*.tsx', '**/*.mts'],
+    rules: {
+      // TypeScript Strict Rules
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        {
+          prefer: 'type-imports',
+          disallowTypeAnnotations: false,
+          fixStyle: 'separate-type-imports',
+        },
+      ],
+      '@typescript-eslint/no-inferrable-types': 'error',
+      '@typescript-eslint/prefer-as-const': 'error',
+      '@typescript-eslint/array-type': ['error', { default: 'array' }],
+      '@typescript-eslint/no-empty-object-type': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'error',
+
+      // General JavaScript / Best Practices
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'no-var': 'error',
+      'prefer-const': 'error',
+      'prefer-template': 'error',
+      'object-shorthand': ['error', 'always'],
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-debugger': 'error',
+      'no-duplicate-case': 'error',
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      'no-eval': 'error',
+      'no-implied-eval': 'error',
+      'no-nested-ternary': 'error',
+      'no-unneeded-ternary': 'error',
+    },
+  },
+  {
+    files: ['**/*.spec.ts', '**/*.test.ts', '**/tests/**', '**/test-setup.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'no-console': 'off',
+    },
   },
 ];
