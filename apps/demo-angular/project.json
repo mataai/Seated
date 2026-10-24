@@ -28,6 +28,7 @@
       },
       "configurations": {
         "production": {
+          "baseHref": "/Seated/",
           "budgets": [
             {
               "type": "initial",
