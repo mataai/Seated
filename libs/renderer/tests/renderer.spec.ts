@@ -141,4 +141,50 @@ describe('Renderer (KonvaRenderer)', () => {
     renderer.resetZoom();
     expect(renderer.getScale()).toBe(1);
   });
+
+  it('adds the background image once when loads overlap', () => {
+    const images: FakeImage[] = [];
+    class FakeImage {
+      src = '';
+      crossOrigin: string | null = null;
+      complete = false;
+      naturalWidth = 0;
+      width = 100;
+      height = 100;
+      private listeners: (() => void)[] = [];
+      constructor() {
+        images.push(this);
+      }
+      addEventListener(_type: string, cb: () => void) {
+        this.listeners.push(cb);
+      }
+      fireLoad() {
+        this.complete = true;
+        this.naturalWidth = 100;
+        const cbs = this.listeners;
+        this.listeners = [];
+        cbs.forEach((cb) => cb());
+      }
+    }
+    vi.stubGlobal('Image', FakeImage);
+
+    try {
+      const plan: Floorplan = { ...testFloorplan, background: { src: 'plan.png' } };
+      renderer = createRenderer({ container, floorplan: plan });
+      renderer.load(plan);
+      renderer.load(plan);
+
+      // The image element is reused across loads and only the latest load adds it
+      expect(images.length).toBe(1);
+      images[0].fireLoad();
+      const layer = (renderer as any).backgroundLayer;
+      expect(layer.getChildren().length).toBe(1);
+
+      // Once loaded, subsequent loads add it synchronously, still exactly once
+      renderer.load(plan);
+      expect(layer.getChildren().length).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

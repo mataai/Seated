@@ -316,7 +316,7 @@ export class SeatsEditorComponent
     });
   }
 
-  @HostListener('window:keydown', ['$event'])
+  @HostListener('keydown', ['$event'])
   public handleKeyDown(e: KeyboardEvent): void {
     if (e.defaultPrevented) return;
 

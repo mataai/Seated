@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import type { RenderSeatContext, TooltipInfo, TooltipProvider } from './types';
 
 export class TooltipManager {
@@ -134,29 +135,10 @@ export class TooltipManager {
   }
 
   private sanitizeHtml(rawHtml: string): DocumentFragment {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(rawHtml, 'text/html');
-    const disallowedTags = ['SCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'FORM', 'STYLE'];
-    disallowedTags.forEach((tag) => {
-      doc.body.querySelectorAll(tag).forEach((el) => el.remove());
+    return DOMPurify.sanitize(rawHtml, {
+      RETURN_DOM_FRAGMENT: true,
+      FORBID_TAGS: ['style', 'form'],
     });
-    const allEls = doc.body.querySelectorAll('*');
-    allEls.forEach((el) => {
-      for (const attr of Array.from(el.attributes)) {
-        if (
-          attr.name.toLowerCase().startsWith('on') ||
-          attr.value.trim().toLowerCase().startsWith('javascript:')
-        ) {
-          el.removeAttribute(attr.name);
-        }
-      }
-    });
-
-    const fragment = document.createDocumentFragment();
-    while (doc.body.firstChild) {
-      fragment.appendChild(doc.body.firstChild);
-    }
-    return fragment;
   }
 
   private visible(show: boolean): void {

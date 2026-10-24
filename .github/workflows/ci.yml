@@ -17,12 +17,14 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    name: Lint Check
+  main:
+    name: Lint, Typecheck, Test & Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -31,45 +33,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
-      - name: Run ESLint
-        run: npx nx run-many -t lint
+      - name: Derive base and head SHAs for affected
+        uses: nrwl/nx-set-shas@v4
 
-  test:
-    name: Unit & Integration Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-
-      - name: Run Tests
-        run: npx nx run-many -t test
-
-  build:
-    name: Production Build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-
-      - name: Build All Packages & Apps
-        run: npx nx run-many -t build
+      - name: Lint, typecheck, test and build affected projects
+        run: npx nx affected -t lint typecheck test build

@@ -171,7 +171,11 @@ describe('Viewer (@open-seats/viewer)', () => {
   it('sanitizes unsafe HTML and event handlers in tooltipProvider', async () => {
     vi.useFakeTimers();
 
-    const maliciousHtml = '<span class="safe">Hello</span><script>alert("xss")</script><img src="x" onerror="alert(1)">';
+    const maliciousHtml =
+      '<span class="safe">Hello</span><script>alert("xss")</script><img src="x" onerror="alert(1)">' +
+      // Bypassed the previous hand-rolled blocklist: browsers strip the tab
+      '<a href="java\tscript:alert(1)">link</a>' +
+      '<meta http-equiv="refresh" content="0;url=https://example.com">';
     const provider = vi.fn().mockImplementation(async () => ({
       html: maliciousHtml,
     }));
@@ -199,6 +203,8 @@ describe('Viewer (@open-seats/viewer)', () => {
       expect(img.getAttribute('onerror')).toBeNull();
     }
     expect(tooltipEl.textContent).toContain('Hello');
+    expect(tooltipEl.querySelector('a')?.hasAttribute('href')).toBe(false);
+    expect(tooltipEl.querySelector('meta')).toBeNull();
 
     vi.useRealTimers();
   });
@@ -249,4 +255,3 @@ describe('Viewer (@open-seats/viewer)', () => {
     expect(viewer.getScale()).toBe(1);
   });
 });
-

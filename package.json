@@ -15,9 +15,9 @@
     "@angular/platform-browser": "22.1.8",
     "@angular/platform-browser-dynamic": "22.1.8",
     "@angular/router": "22.1.8",
+    "dompurify": "^3.2.6",
     "konva": "^9.3.20",
     "rxjs": "~7.8.0",
-    "uuid": "^11.1.0",
     "zod": "^4.6.7",
     "zone.js": "0.16.3"
   },

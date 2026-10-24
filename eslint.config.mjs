@@ -22,11 +22,35 @@ export default [
         {
           enforceBuildableLibDependency: true,
           allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?js$'],
+          // Packages may only depend on the layers below them
           depConstraints: [
+            { sourceTag: 'layer:core', onlyDependOnLibsWithTags: [] },
             {
-              sourceTag: '*',
-              onlyDependOnLibsWithTags: ['*'],
+              sourceTag: 'layer:renderer',
+              onlyDependOnLibsWithTags: ['layer:core'],
             },
+            {
+              sourceTag: 'layer:viewer',
+              onlyDependOnLibsWithTags: ['layer:core', 'layer:renderer'],
+            },
+            {
+              sourceTag: 'layer:editor',
+              onlyDependOnLibsWithTags: [
+                'layer:core',
+                'layer:renderer',
+                'layer:viewer',
+              ],
+            },
+            {
+              sourceTag: 'layer:framework',
+              onlyDependOnLibsWithTags: [
+                'layer:core',
+                'layer:renderer',
+                'layer:viewer',
+                'layer:editor',
+              ],
+            },
+            { sourceTag: 'type:app', onlyDependOnLibsWithTags: ['*'] },
           ],
         },
       ],

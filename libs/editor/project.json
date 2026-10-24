@@ -10,7 +10,7 @@
       "fallbackCurrentVersionResolver": "disk"
     }
   },
-  "tags": [],
+  "tags": ["layer:editor"],
   "targets": {
     "nx-release-publish": {
       "options": {

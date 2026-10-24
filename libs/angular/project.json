@@ -28,5 +28,6 @@
         "reportsDirectory": "coverage/libs/angular"
       }
     }
-  }
+  },
+  "tags": ["layer:framework"]
 }

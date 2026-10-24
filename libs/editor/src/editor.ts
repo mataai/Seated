@@ -3,6 +3,7 @@ import {
   canPlace,
   flipPolygon,
   inverseTransformPoint,
+  parseFloorplan,
   polygonBoundingBox,
   polygonCentroid,
   polygonsOverlap,
@@ -33,6 +34,11 @@ import type {
   ToolType,
 } from './types';
 
+type EditableNode =
+  | { kind: 'building'; node: Building; parent: null }
+  | { kind: 'zone'; node: Zone; parent: Building }
+  | { kind: 'row'; node: Row; parent: Building };
+
 export class Editor implements EditorInstance {
   private container: HTMLElement;
   private floorplan: Floorplan;
@@ -56,6 +62,9 @@ export class Editor implements EditorInstance {
   private rules: EditorRulesConfig;
   private grid: GridSnappingConfig;
 
+  private batchDepth = 0;
+  private changePending = false;
+
   private renderer?: Renderer;
   private embeddedViewer?: ViewerInstance;
   private editorCanvasContainer: HTMLDivElement;
@@ -71,8 +80,9 @@ export class Editor implements EditorInstance {
       size: options.gridSnapping?.size ?? 10,
     };
 
+    // parseFloorplan validates the input and returns a fresh copy
     this.floorplan = options.floorplan
-      ? structuredClone(options.floorplan)
+      ? parseFloorplan(options.floorplan)
       : {
           schemaVersion: 1,
           dimensions: { width: 1200, height: 800 },
@@ -87,9 +97,6 @@ export class Editor implements EditorInstance {
       this.container.tabIndex = 0;
     }
     this.container.addEventListener('keydown', this.onKeyDown);
-    if (typeof window !== 'undefined') {
-      window.addEventListener('keydown', this.onKeyDown);
-    }
 
     this.editorCanvasContainer = document.createElement('div');
     this.editorCanvasContainer.className = 'open-seats-editor-canvas';
@@ -196,9 +203,12 @@ export class Editor implements EditorInstance {
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (this.selectedNodeIds.length > 0) {
         e.preventDefault();
-        for (const id of [...this.selectedNodeIds]) {
-          this.deleteNode(id);
-        }
+        const ids = [...this.selectedNodeIds];
+        this.batch(`Delete ${ids.length} items`, () => {
+          for (const id of ids) {
+            this.deleteNode(id);
+          }
+        });
         this.clearSelection();
       }
       return;
@@ -228,9 +238,12 @@ export class Editor implements EditorInstance {
 
       if (dx !== 0 || dy !== 0) {
         e.preventDefault();
-        for (const id of this.selectedNodeIds) {
-          this.nudgeNode(id, dx, dy);
-        }
+        const ids = [...this.selectedNodeIds];
+        this.batch(`Nudge ${ids.length} items`, () => {
+          for (const id of ids) {
+            this.nudgeNode(id, dx, dy);
+          }
+        });
         return;
       }
     }
@@ -245,7 +258,27 @@ export class Editor implements EditorInstance {
     };
   }
 
+  /**
+   * Runs `fn` as a single undo step and emits at most one change at the end.
+   */
+  private batch<T>(name: string, fn: () => T): T {
+    this.batchDepth++;
+    try {
+      return this.commandStack.group(name, fn);
+    } finally {
+      this.batchDepth--;
+      if (this.batchDepth === 0 && this.changePending) {
+        this.changePending = false;
+        this.emitChange();
+      }
+    }
+  }
+
   private emitChange(): void {
+    if (this.batchDepth > 0) {
+      this.changePending = true;
+      return;
+    }
     if (this.renderer) {
       this.renderer.load(this.floorplan);
       if (this.selectedNodeIds.length > 0) {
@@ -260,10 +293,12 @@ export class Editor implements EditorInstance {
   }
 
   public loadFloorplan(floorplan: Floorplan): void {
+    // Validate first so an invalid plan leaves the editor untouched
+    const parsed = parseFloorplan(floorplan);
     if (this.isDrawingBuilding) {
       this.cancelBuildingCreation();
     }
-    this.floorplan = structuredClone(floorplan);
+    this.floorplan = parsed;
     this.commandStack.clear();
     this.selectedNodeIds = [];
     this.emitChange();
@@ -1015,66 +1050,49 @@ export class Editor implements EditorInstance {
       }
     }
 
-    for (const b of this.floorplan.buildings) {
-      if (b.id === nodeId) {
-        const oldPos = b.position;
-        this.commandStack.execute({
-          name: `Move Building ${b.label}`,
-          execute: () => {
-            b.position = snapped;
-          },
-          undo: () => {
-            b.position = oldPos;
-          },
-        });
-        this.emitChange();
-        return true;
-      }
+    const found = this.findNode(nodeId);
+    if (!found) return false;
 
-      const zone = (b.zones ?? []).find((z) => z.id === nodeId);
-      if (zone) {
-        const oldPos = zone.position;
-        this.commandStack.execute({
-          name: `Move Zone ${zone.id}`,
-          execute: () => {
-            zone.position = snapped;
-          },
-          undo: () => {
-            zone.position = oldPos;
-          },
-        });
-        this.emitChange();
-        return true;
-      }
-
-      const row = (b.rows ?? []).find((r) => r.id === nodeId);
-      if (row) {
-        const oldPos = row.position;
-        this.commandStack.execute({
-          name: `Move Row ${row.label}`,
-          execute: () => {
-            row.position = snapped;
-          },
-          undo: () => {
-            row.position = oldPos;
-          },
-        });
-        this.emitChange();
-        return true;
-      }
-    }
-    return false;
+    const node = found.node;
+    const oldPos = node.position;
+    this.commandStack.execute({
+      name: `Move ${this.describeNode(found)}`,
+      execute: () => {
+        node.position = snapped;
+      },
+      undo: () => {
+        node.position = oldPos;
+      },
+    });
+    this.emitChange();
+    return true;
   }
 
   public getNodePosition(nodeId: string): Vec2 | null {
+    const found = this.findNode(nodeId);
+    return found ? { ...found.node.position } : null;
+  }
+
+  private findNode(nodeId: string): EditableNode | null {
     for (const b of this.floorplan.buildings) {
-      if (b.id === nodeId) return { ...b.position };
+      if (b.id === nodeId) return { kind: 'building', node: b, parent: null };
       const zone = (b.zones ?? []).find((z) => z.id === nodeId);
-      if (zone) return { ...zone.position };
+      if (zone) return { kind: 'zone', node: zone, parent: b };
       const row = (b.rows ?? []).find((r) => r.id === nodeId);
-      if (row) return { ...row.position };
+      if (row) return { kind: 'row', node: row, parent: b };
     }
     return null;
+  }
+
+  private describeNode(found: EditableNode): string {
+    switch (found.kind) {
+      case 'building':
+        return `Building ${found.node.label}`;
+      case 'zone':
+        return `Zone ${found.node.id}`;
+      case 'row':
+        return `Row ${found.node.label}`;
+    }
   }
 
   public nudgeNode(nodeId: string, dx: number, dy: number): boolean {
@@ -1096,56 +1114,22 @@ export class Editor implements EditorInstance {
       }
     }
 
-    for (const b of this.floorplan.buildings) {
-      if (b.id === nodeId) {
-        const oldRot = b.rotation;
-        this.commandStack.execute({
-          name: `Rotate Building ${b.label}`,
-          execute: () => {
-            b.rotation = newRotation;
-          },
-          undo: () => {
-            b.rotation = oldRot;
-          },
-        });
-        this.emitChange();
-        return true;
-      }
+    const found = this.findNode(nodeId);
+    if (!found) return false;
 
-      const zone = (b.zones ?? []).find((z) => z.id === nodeId);
-      if (zone) {
-        const oldRot = zone.rotation;
-        this.commandStack.execute({
-          name: `Rotate Zone ${zone.id}`,
-          execute: () => {
-            zone.rotation = newRotation;
-          },
-          undo: () => {
-            zone.rotation = oldRot;
-          },
-        });
-        this.emitChange();
-        return true;
-      }
-
-      const row = (b.rows ?? []).find((r) => r.id === nodeId);
-      if (row) {
-        const oldRot = row.rotation;
-        this.commandStack.execute({
-          name: `Rotate Row ${row.label}`,
-          execute: () => {
-            row.rotation = newRotation;
-          },
-          undo: () => {
-            row.rotation = oldRot;
-          },
-        });
-        this.emitChange();
-        return true;
-      }
-    }
-
-    return false;
+    const node = found.node;
+    const oldRot = node.rotation;
+    this.commandStack.execute({
+      name: `Rotate ${this.describeNode(found)}`,
+      execute: () => {
+        node.rotation = newRotation;
+      },
+      undo: () => {
+        node.rotation = oldRot;
+      },
+    });
+    this.emitChange();
+    return true;
   }
 
   public reparentRow(
@@ -1264,59 +1248,26 @@ export class Editor implements EditorInstance {
   }
 
   public deleteNode(nodeId: string): boolean {
-    // Check if building
-    const bIdx = this.floorplan.buildings.findIndex((b) => b.id === nodeId);
-    if (bIdx >= 0) {
-      const removed = this.floorplan.buildings[bIdx];
-      this.commandStack.execute({
-        name: `Delete Building ${removed.label}`,
-        execute: () => {
-          this.floorplan.buildings.splice(bIdx, 1);
-        },
-        undo: () => {
-          this.floorplan.buildings.splice(bIdx, 0, removed);
-        },
-      });
-      this.emitChange();
-      return true;
-    }
+    const found = this.findNode(nodeId);
+    if (!found) return false;
 
-    // Check zones and rows
-    for (const b of this.floorplan.buildings) {
-      const zIdx = (b.zones ?? []).findIndex((z) => z.id === nodeId);
-      if (zIdx >= 0) {
-        const removed = b.zones[zIdx];
-        this.commandStack.execute({
-          name: `Delete Zone ${removed.id}`,
-          execute: () => {
-            b.zones.splice(zIdx, 1);
-          },
-          undo: () => {
-            b.zones.splice(zIdx, 0, removed);
-          },
-        });
-        this.emitChange();
-        return true;
-      }
-
-      const rIdx = (b.rows ?? []).findIndex((r) => r.id === nodeId);
-      if (rIdx >= 0) {
-        const removed = b.rows[rIdx];
-        this.commandStack.execute({
-          name: `Delete Row ${removed.label}`,
-          execute: () => {
-            b.rows.splice(rIdx, 1);
-          },
-          undo: () => {
-            b.rows.splice(rIdx, 0, removed);
-          },
-        });
-        this.emitChange();
-        return true;
-      }
-    }
-
-    return false;
+    let list: (Building | Zone | Row)[];
+    if (found.kind === 'building') list = this.floorplan.buildings;
+    else if (found.kind === 'zone') list = found.parent.zones;
+    else list = found.parent.rows;
+    const idx = list.indexOf(found.node);
+    const removed = found.node;
+    this.commandStack.execute({
+      name: `Delete ${this.describeNode(found)}`,
+      execute: () => {
+        list.splice(idx, 1);
+      },
+      undo: () => {
+        list.splice(idx, 0, removed);
+      },
+    });
+    this.emitChange();
+    return true;
   }
 
   public addSeatOnCanvas(buildingId: string, position: Vec2): Row | null {
@@ -1727,9 +1678,11 @@ export class Editor implements EditorInstance {
     if (!success) return false;
 
     const idsToDelete = [...this.selectedNodeIds];
-    for (const id of idsToDelete) {
-      this.deleteNode(id);
-    }
+    this.batch(`Cut ${idsToDelete.length} items`, () => {
+      for (const id of idsToDelete) {
+        this.deleteNode(id);
+      }
+    });
     this.clearSelection();
     return true;
   }
@@ -2563,9 +2516,6 @@ export class Editor implements EditorInstance {
 
   public destroy(): void {
     this.container.removeEventListener('keydown', this.onKeyDown);
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('keydown', this.onKeyDown);
-    }
     if (this.embeddedViewer) {
       this.embeddedViewer.destroy();
     }

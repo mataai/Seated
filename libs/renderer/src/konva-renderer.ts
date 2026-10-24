@@ -56,6 +56,11 @@ export class KonvaRenderer implements Renderer {
   private options: RendererOptions;
   private resizeObserver?: ResizeObserver;
 
+  // Background image cache; the token discards loads superseded by a newer load()
+  private backgroundImage: HTMLImageElement | null = null;
+  private backgroundSrc: string | null = null;
+  private backgroundToken = 0;
+
   // Touch pinch zoom state
   private lastTouchDist = 0;
   private lastTouchCenter: Vec2 = { x: 0, y: 0 };
@@ -239,14 +244,11 @@ export class KonvaRenderer implements Renderer {
   }
 
   private renderBackground(floorplan: Floorplan): void {
+    const token = ++this.backgroundToken;
     if (!floorplan.background?.src) return;
 
     const bg = floorplan.background;
-    const imgObj = new Image();
-    imgObj.crossOrigin = 'Anonymous';
-    imgObj.src = bg.src;
-
-    imgObj.onload = () => {
+    const addImage = (imgObj: HTMLImageElement) => {
       const konvaImage = new Konva.Image({
         image: imgObj,
         x: bg.position?.x ?? 0,
@@ -260,6 +262,35 @@ export class KonvaRenderer implements Renderer {
       this.backgroundLayer.add(konvaImage);
       this.backgroundLayer.batchDraw();
     };
+
+    const cached = this.backgroundImage;
+    if (cached && this.backgroundSrc === bg.src) {
+      if (cached.complete && cached.naturalWidth > 0) {
+        addImage(cached);
+      } else {
+        cached.addEventListener(
+          'load',
+          () => {
+            if (token === this.backgroundToken) addImage(cached);
+          },
+          { once: true }
+        );
+      }
+      return;
+    }
+
+    const imgObj = new Image();
+    imgObj.crossOrigin = 'Anonymous';
+    this.backgroundImage = imgObj;
+    this.backgroundSrc = bg.src;
+    imgObj.addEventListener(
+      'load',
+      () => {
+        if (token === this.backgroundToken) addImage(imgObj);
+      },
+      { once: true }
+    );
+    imgObj.src = bg.src;
   }
 
   private flattenPoints(points: Vec2[]): number[] {
@@ -1040,6 +1071,9 @@ export class KonvaRenderer implements Renderer {
   }
 
   public destroy(): void {
+    this.backgroundToken++;
+    this.backgroundImage = null;
+    this.backgroundSrc = null;
     this.resizeObserver?.disconnect();
     this.stage.destroy();
     this.seatCircles.clear();

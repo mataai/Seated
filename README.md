@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/mataai/Seated/actions/workflows/ci.yml/badge.svg)](https://github.com/mataai/Seated/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.x-blue.svg)](https://www.typescriptlang.org/)
 [![Nx Monorepo](https://img.shields.io/badge/Nx-Monorepo-blueviolet.svg)](https://nx.dev)
-[![Angular](https://img.shields.io/badge/Angular-19%2B%20%2F%2022%2B-DD0031.svg)](https://angular.dev)
+[![Angular](https://img.shields.io/badge/Angular-19%E2%80%9322-DD0031.svg)](https://angular.dev)
 
 An open-source, framework-agnostic JavaScript/TypeScript suite for **interactive floorplan management and seat reservations**:
 
@@ -65,7 +65,7 @@ Install only the packages required by your application:
 npm install @open-seats/viewer @open-seats/editor
 ```
 
-### Angular (19+ / 22+)
+### Angular (19–22)
 ```bash
 npm install @open-seats/angular @open-seats/viewer @open-seats/editor
 ```

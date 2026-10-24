@@ -2,13 +2,14 @@
   "name": "@open-seats/angular",
   "version": "0.0.1",
   "peerDependencies": {
-    "@angular/common": "^19.0.0",
-    "@angular/core": "^19.0.0",
-    "@open-seats/core": "workspace:*",
-    "@open-seats/viewer": "workspace:*",
-    "@open-seats/editor": "workspace:*"
+    "@angular/common": ">=19.0.0 <23.0.0",
+    "@angular/core": ">=19.0.0 <23.0.0",
+    "@open-seats/core": "0.0.1",
+    "@open-seats/viewer": "0.0.1",
+    "@open-seats/editor": "0.0.1"
   },
   "dependencies": {
     "tslib": "^2.3.0"
-  }
+  },
+  "sideEffects": false
 }

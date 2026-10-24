@@ -35,7 +35,7 @@ export default defineConfig(() => ({
       formats: ['es' as const],
     },
     rolldownOptions: {
-      external: ['@open-seats/core', '@open-seats/renderer', 'konva'],
+      external: ['@open-seats/core', '@open-seats/renderer', 'konva', 'dompurify'],
     },
   },
   test: {

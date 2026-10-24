@@ -7,6 +7,10 @@
     "declarationMap": false,
     "inlineSources": true,
     "types": [],
+    // The @nx/angular:package executor copies this config into tmp/, so paths
+    // must resolve from a workspace-root baseUrl rather than this file.
+    "baseUrl": "../..",
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@open-seats/core": ["dist/libs/core/index.d.ts"],
       "@open-seats/renderer": ["dist/libs/renderer/index.d.ts"],
@@ -15,8 +19,7 @@
     },
     "moduleResolution": "bundler",
     "module": "preserve",
-    "lib": ["dom", "es2022"],
-    "ignoreDeprecations": "6.0"
+    "lib": ["dom", "es2022"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["**/*.spec.ts", "tests/**/*.ts"],

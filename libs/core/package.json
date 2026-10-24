@@ -4,6 +4,15 @@
   "type": "module",
   "main": "./index.js",
   "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
   "dependencies": {
     "zod": "^4.6.7"
   }

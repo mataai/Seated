@@ -685,7 +685,51 @@ describe('Editor (@open-seats/editor)', () => {
     expect(editor.getTool()).toBe('select');
     expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
   });
+
+  it('ignores keyboard shortcuts dispatched outside the editor container', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const row = editor.createRow('b-1', { x: 100, y: 100 }, 2)!;
+    editor.selectNodes([row.id]);
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }));
+
+    expect(editor.getFloorplan().buildings[0].rows.length).toBe(1);
+  });
+
+  it('deletes a multi-selection as one undo step with one change event', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const rowA = editor.createRow('b-1', { x: 100, y: 100 }, 2)!;
+    const rowB = editor.createRow('b-1', { x: 100, y: 250 }, 2)!;
+    editor.selectNodes([rowA.id, rowB.id]);
+
+    let changes = 0;
+    editor.on('change', () => changes++);
+    container.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+
+    expect(editor.getFloorplan().buildings[0].rows.length).toBe(0);
+    expect(changes).toBe(1);
+
+    expect(editor.undo()).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows.map((r) => r.id)).toEqual([rowA.id, rowB.id]);
+
+    expect(editor.undo()).toBe(true);
+    expect(editor.getFloorplan().buildings[0].rows.map((r) => r.id)).toEqual([rowA.id]);
+  });
+
+  it('rejects an invalid floorplan and keeps the current one', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const invalid = { ...initialPlan, schemaVersion: 2 } as unknown as Floorplan;
+
+    expect(() => editor!.loadFloorplan(invalid)).toThrow();
+    expect(editor.getFloorplan()).toEqual(initialPlan);
+  });
+
+  it('does not share state with the floorplan passed in', () => {
+    const plan = structuredClone(initialPlan);
+    editor = createEditor(container, { floorplan: plan });
+    plan.buildings[0].position.x = 999;
+
+    expect(editor.getFloorplan().buildings[0].position).toEqual({ x: 50, y: 50 });
+  });
 });
-
-
-

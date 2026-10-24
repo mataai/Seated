@@ -40,7 +40,7 @@ export default defineConfig(() => ({
     },
     rolldownOptions: {
       // External packages that should not be bundled into your library.
-      external: [],
+      external: ['zod'],
     },
   },
   test: {
