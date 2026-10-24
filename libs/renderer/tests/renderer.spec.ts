@@ -58,8 +58,14 @@ describe('Renderer (KonvaRenderer)', () => {
 
   beforeEach(() => {
     container = document.createElement('div');
-    Object.defineProperty(container, 'clientWidth', { value: 800, configurable: true });
-    Object.defineProperty(container, 'clientHeight', { value: 600, configurable: true });
+    Object.defineProperty(container, 'clientWidth', {
+      value: 800,
+      configurable: true,
+    });
+    Object.defineProperty(container, 'clientHeight', {
+      value: 600,
+      configurable: true,
+    });
     document.body.appendChild(container);
   });
 
@@ -169,7 +175,10 @@ describe('Renderer (KonvaRenderer)', () => {
     vi.stubGlobal('Image', FakeImage);
 
     try {
-      const plan: Floorplan = { ...testFloorplan, background: { src: 'plan.png' } };
+      const plan: Floorplan = {
+        ...testFloorplan,
+        background: { src: 'plan.png' },
+      };
       renderer = createRenderer({ container, floorplan: plan });
       renderer.load(plan);
       renderer.load(plan);

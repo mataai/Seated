@@ -3,6 +3,7 @@
 Pure TypeScript schema, geometry, validation, and status registry for the OpenSeats floorplan management system.
 
 ## Key Features
+
 - **No DOM, No Konva, Framework-Agnostic**: Pure computational and schema layer.
 - **Zod Schema**: Complete runtime schema validation for Floorplans, Buildings, Zones, Rows, and Seats.
 - **Geometry & Spatial Math**: Vector transformations, polygon winding normalisation, interior edge crossing checks, point-in-polygon containment, and ear-clipping triangulation.
@@ -11,6 +12,7 @@ Pure TypeScript schema, geometry, validation, and status registry for the OpenSe
 - **Typed Event Emitter**: Zero-dependency typed event dispatch.
 
 ## Installation
+
 ```bash
 npm install @open-seats/core
 ```

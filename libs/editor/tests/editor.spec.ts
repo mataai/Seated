@@ -43,8 +43,14 @@ describe('Editor (@open-seats/editor)', () => {
 
   beforeEach(() => {
     container = document.createElement('div');
-    Object.defineProperty(container, 'clientWidth', { value: 1000, configurable: true });
-    Object.defineProperty(container, 'clientHeight', { value: 800, configurable: true });
+    Object.defineProperty(container, 'clientWidth', {
+      value: 1000,
+      configurable: true,
+    });
+    Object.defineProperty(container, 'clientHeight', {
+      value: 800,
+      configurable: true,
+    });
     document.body.appendChild(container);
   });
 
@@ -193,12 +199,16 @@ describe('Editor (@open-seats/editor)', () => {
     // Add vertex on edge
     const addOk = editor.addVertex('b-1', 1, { x: 480, y: 200 });
     expect(addOk).toBe(true);
-    expect(editor.getFloorplan().buildings[0].points.length).toBe(initialPointsCount + 1);
+    expect(editor.getFloorplan().buildings[0].points.length).toBe(
+      initialPointsCount + 1
+    );
 
     // Delete vertex
     const deleteOk = editor.deleteVertex('b-1', 2);
     expect(deleteOk).toBe(true);
-    expect(editor.getFloorplan().buildings[0].points.length).toBe(initialPointsCount);
+    expect(editor.getFloorplan().buildings[0].points.length).toBe(
+      initialPointsCount
+    );
 
     // Delete down to 3 vertices
     editor.deleteVertex('b-1', 0);
@@ -212,7 +222,10 @@ describe('Editor (@open-seats/editor)', () => {
 
   it('toggles row side and updates table width with validation', () => {
     editor = createEditor(container, { floorplan: initialPlan });
-    const row = editor.createRow('b-1', { x: 100, y: 100 }, 4, { side: 'both', tableWidth: 30 })!;
+    const row = editor.createRow('b-1', { x: 100, y: 100 }, 4, {
+      side: 'both',
+      tableWidth: 30,
+    })!;
 
     // Toggle side to 'one'
     const sideOk = editor.setRowSide(row.id, 'one');
@@ -231,16 +244,22 @@ describe('Editor (@open-seats/editor)', () => {
     expect(editor.getFloorplan().buildings[0].rows.length).toBe(1);
 
     // Ctrl+Z -> Undo
-    container.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })
+    );
     expect(editor.getFloorplan().buildings[0].rows.length).toBe(0);
 
     // Ctrl+Y -> Redo
-    container.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', ctrlKey: true, bubbles: true }));
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'y', ctrlKey: true, bubbles: true })
+    );
     expect(editor.getFloorplan().buildings[0].rows.length).toBe(1);
 
     // Select row and press Delete
     editor.selectNodes([row.id]);
-    container.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })
+    );
     expect(editor.getFloorplan().buildings[0].rows.length).toBe(0);
   });
 
@@ -251,7 +270,12 @@ describe('Editor (@open-seats/editor)', () => {
 
     // Simulate drag 1 end on the row group via renderer options callback
     const renderer = (editor as any).renderer;
-    renderer.options.onNodeDragEnd?.(row.id, 'row', { x: 180, y: 160 }, new MouseEvent('mouseup'));
+    renderer.options.onNodeDragEnd?.(
+      row.id,
+      'row',
+      { x: 180, y: 160 },
+      new MouseEvent('mouseup')
+    );
     await Promise.resolve();
 
     let updatedRow = editor.getFloorplan().buildings[0].rows[0];
@@ -259,7 +283,12 @@ describe('Editor (@open-seats/editor)', () => {
     expect(updatedRow.position.y).toBe(160);
 
     // Simulate drag 2 end to a new position
-    renderer.options.onNodeDragEnd?.(row.id, 'row', { x: 220, y: 200 }, new MouseEvent('mouseup'));
+    renderer.options.onNodeDragEnd?.(
+      row.id,
+      'row',
+      { x: 220, y: 200 },
+      new MouseEvent('mouseup')
+    );
     await Promise.resolve();
 
     updatedRow = editor.getFloorplan().buildings[0].rows[0];
@@ -311,12 +340,23 @@ describe('Editor (@open-seats/editor)', () => {
   it('creates rectangle building and zone with valid geometry', () => {
     editor = createEditor(container, { floorplan: initialPlan });
 
-    const newBuilding = editor.createRectangleBuilding({ x: 50, y: 500 }, 300, 200, 'South Wing');
+    const newBuilding = editor.createRectangleBuilding(
+      { x: 50, y: 500 },
+      300,
+      200,
+      'South Wing'
+    );
     expect(newBuilding).not.toBeNull();
     expect(newBuilding!.points.length).toBe(4);
     expect(editor.getFloorplan().buildings.length).toBe(3);
 
-    const newZone = editor.createRectangleZone(newBuilding!.id, { x: 20, y: 20 }, 100, 60, '#ff4444');
+    const newZone = editor.createRectangleZone(
+      newBuilding!.id,
+      { x: 20, y: 20 },
+      100,
+      60,
+      '#ff4444'
+    );
     expect(newZone).not.toBeNull();
     expect(newZone!.points.length).toBe(4);
     expect(editor.getFloorplan().buildings[2].zones.length).toBe(1);
@@ -348,7 +388,9 @@ describe('Editor (@open-seats/editor)', () => {
 
   it('supports flipping nodes (horizontal and vertical)', () => {
     editor = createEditor(container, { floorplan: initialPlan });
-    const row = editor.createRow('b-1', { x: 100, y: 100 }, 4, { rotation: 45 })!;
+    const row = editor.createRow('b-1', { x: 100, y: 100 }, 4, {
+      rotation: 45,
+    })!;
 
     expect(editor.flipNode(row.id, 'horizontal')).toBe(true);
     const flippedRow = editor.getFloorplan().buildings[0].rows[0];
@@ -379,7 +421,12 @@ describe('Editor (@open-seats/editor)', () => {
 
   it('adjusts size of shapes via setShapeDimensions', () => {
     editor = createEditor(container, { floorplan: initialPlan });
-    const zone = editor.createRectangleZone('b-1', { x: 100, y: 100 }, 100, 80)!;
+    const zone = editor.createRectangleZone(
+      'b-1',
+      { x: 100, y: 100 },
+      100,
+      80
+    )!;
     expect(zone).not.toBeNull();
 
     expect(editor.setShapeDimensions(zone.id, 150, 100)).toBe(true);
@@ -498,9 +545,12 @@ describe('Editor (@open-seats/editor)', () => {
 
     expect(editor.isCreatingBuilding()).toBe(false);
     expect(editor.getTool()).toBe('select');
-    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+    expect(editor.getFloorplan().buildings.length).toBe(
+      initialBuildingCount + 1
+    );
 
-    const createdBuilding = editor.getFloorplan().buildings[initialBuildingCount];
+    const createdBuilding =
+      editor.getFloorplan().buildings[initialBuildingCount];
     expect(createdBuilding.label).toBe('New Pavilion');
     expect(createdBuilding.points.length).toBe(4);
     expect(createdBuilding.position.x).toBe(50);
@@ -515,7 +565,9 @@ describe('Editor (@open-seats/editor)', () => {
 
     // Redo should restore the new building
     expect(editor.redo()).toBe(true);
-    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+    expect(editor.getFloorplan().buildings.length).toBe(
+      initialBuildingCount + 1
+    );
   });
 
   it('does not save building if clicking an existing point when fewer than 3 points exist', () => {
@@ -544,7 +596,9 @@ describe('Editor (@open-seats/editor)', () => {
     // Now clicking existing point closes and saves!
     editorAny.handleStageClick({ x: 50, y: 500 }, new MouseEvent('click'));
     expect(editor.isCreatingBuilding()).toBe(false);
-    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+    expect(editor.getFloorplan().buildings.length).toBe(
+      initialBuildingCount + 1
+    );
   });
 
   it('cancels building creation on cancelBuildingCreation() or Escape', () => {
@@ -579,16 +633,22 @@ describe('Editor (@open-seats/editor)', () => {
     expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount);
 
     // Mouse move simulates live rectangle stretch
-    editorAny.handleStageMouseMove({ x: 350, y: 750 }, new MouseEvent('mousemove'));
+    editorAny.handleStageMouseMove(
+      { x: 350, y: 750 },
+      new MouseEvent('mousemove')
+    );
 
     // Click opposite corner 2 (bottom-right)
     editorAny.handleStageClick({ x: 350, y: 750 }, new MouseEvent('click'));
 
     expect(editor.isCreatingBuilding()).toBe(false);
     expect(editor.getTool()).toBe('select');
-    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+    expect(editor.getFloorplan().buildings.length).toBe(
+      initialBuildingCount + 1
+    );
 
-    const createdBuilding = editor.getFloorplan().buildings[initialBuildingCount];
+    const createdBuilding =
+      editor.getFloorplan().buildings[initialBuildingCount];
     expect(createdBuilding.label).toBe('East Hall');
     expect(createdBuilding.position.x).toBe(50);
     expect(createdBuilding.position.y).toBe(500);
@@ -607,7 +667,9 @@ describe('Editor (@open-seats/editor)', () => {
 
     // Redo restores it
     expect(editor.redo()).toBe(true);
-    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+    expect(editor.getFloorplan().buildings.length).toBe(
+      initialBuildingCount + 1
+    );
   });
 
   it('normalizes rectangle creation when second corner is clicked up-and-left from first corner', () => {
@@ -623,9 +685,12 @@ describe('Editor (@open-seats/editor)', () => {
     editorAny.handleStageClick({ x: 50, y: 500 }, new MouseEvent('click'));
 
     expect(editor.isCreatingBuilding()).toBe(false);
-    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+    expect(editor.getFloorplan().buildings.length).toBe(
+      initialBuildingCount + 1
+    );
 
-    const createdBuilding = editor.getFloorplan().buildings[initialBuildingCount];
+    const createdBuilding =
+      editor.getFloorplan().buildings[initialBuildingCount];
     expect(createdBuilding.label).toBe('Reversed Hall');
     expect(createdBuilding.position.x).toBe(50);
     expect(createdBuilding.position.y).toBe(500);
@@ -669,7 +734,9 @@ describe('Editor (@open-seats/editor)', () => {
     expect(failedEvent).not.toBeNull();
     expect(failedEvent.reason).toContain('overlaps');
     expect(violationsEvent).not.toBeNull();
-    expect(violationsEvent.some((v: any) => v.rule === 'building-overlap')).toBe(true);
+    expect(
+      violationsEvent.some((v: any) => v.rule === 'building-overlap')
+    ).toBe(true);
 
     // Editor should NOT be broken: it should still be in building creation mode with draft points reset
     expect(editor.isCreatingBuilding()).toBe(true);
@@ -683,7 +750,9 @@ describe('Editor (@open-seats/editor)', () => {
     editorAny.handleStageClick({ x: 350, y: 750 }, new MouseEvent('click'));
     expect(editor.isCreatingBuilding()).toBe(false);
     expect(editor.getTool()).toBe('select');
-    expect(editor.getFloorplan().buildings.length).toBe(initialBuildingCount + 1);
+    expect(editor.getFloorplan().buildings.length).toBe(
+      initialBuildingCount + 1
+    );
   });
 
   it('ignores keyboard shortcuts dispatched outside the editor container', () => {
@@ -691,7 +760,9 @@ describe('Editor (@open-seats/editor)', () => {
     const row = editor.createRow('b-1', { x: 100, y: 100 }, 2)!;
     editor.selectNodes([row.id]);
 
-    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true })
+    );
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }));
 
     expect(editor.getFloorplan().buildings[0].rows.length).toBe(1);
@@ -705,21 +776,31 @@ describe('Editor (@open-seats/editor)', () => {
 
     let changes = 0;
     editor.on('change', () => changes++);
-    container.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })
+    );
 
     expect(editor.getFloorplan().buildings[0].rows.length).toBe(0);
     expect(changes).toBe(1);
 
     expect(editor.undo()).toBe(true);
-    expect(editor.getFloorplan().buildings[0].rows.map((r) => r.id)).toEqual([rowA.id, rowB.id]);
+    expect(editor.getFloorplan().buildings[0].rows.map((r) => r.id)).toEqual([
+      rowA.id,
+      rowB.id,
+    ]);
 
     expect(editor.undo()).toBe(true);
-    expect(editor.getFloorplan().buildings[0].rows.map((r) => r.id)).toEqual([rowA.id]);
+    expect(editor.getFloorplan().buildings[0].rows.map((r) => r.id)).toEqual([
+      rowA.id,
+    ]);
   });
 
   it('rejects an invalid floorplan and keeps the current one', () => {
     editor = createEditor(container, { floorplan: initialPlan });
-    const invalid = { ...initialPlan, schemaVersion: 2 } as unknown as Floorplan;
+    const invalid = {
+      ...initialPlan,
+      schemaVersion: 2,
+    } as unknown as Floorplan;
 
     expect(() => editor!.loadFloorplan(invalid)).toThrow();
     expect(editor.getFloorplan()).toEqual(initialPlan);
@@ -730,6 +811,9 @@ describe('Editor (@open-seats/editor)', () => {
     editor = createEditor(container, { floorplan: plan });
     plan.buildings[0].position.x = 999;
 
-    expect(editor.getFloorplan().buildings[0].position).toEqual({ x: 50, y: 50 });
+    expect(editor.getFloorplan().buildings[0].position).toEqual({
+      x: 50,
+      y: 50,
+    });
   });
 });

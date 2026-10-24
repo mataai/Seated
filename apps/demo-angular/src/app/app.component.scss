@@ -12,7 +12,9 @@
   background-color: #09090b;
   color: #f4f4f5;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
 }
 
 .app-header {
@@ -280,10 +282,18 @@
   height: 10px;
   border-radius: 50%;
 
-  &.dot-available { background: #4caf50; }
-  &.dot-selected { background: #2196f3; }
-  &.dot-reserved { background: #9e9e9e; }
-  &.dot-locked { background: #f44336; }
+  &.dot-available {
+    background: #4caf50;
+  }
+  &.dot-selected {
+    background: #2196f3;
+  }
+  &.dot-reserved {
+    background: #9e9e9e;
+  }
+  &.dot-locked {
+    background: #f44336;
+  }
 }
 
 .count {

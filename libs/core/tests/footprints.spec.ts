@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  rowFootprint,
-  seatPosition,
-  type Row,
-  type Seat,
-} from '../src';
+import { rowFootprint, seatPosition, type Row, type Seat } from '../src';
 
 describe('Footprints & Seat Positions', () => {
   const seatA: Seat = { id: 's-1', index: 0, side: 'a', label: '1A' };

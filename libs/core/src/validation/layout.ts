@@ -247,7 +247,9 @@ function validateBuildingInternals(
     const zBox = zoneBoxes.get(zone.id);
     if (!zPoly || !zBox) continue;
 
-    const candidateRowIds = rowSpatialIndex ? rowSpatialIndex.query(zBox) : rows.map((r) => r.id);
+    const candidateRowIds = rowSpatialIndex
+      ? rowSpatialIndex.query(zBox)
+      : rows.map((r) => r.id);
 
     for (const rowId of candidateRowIds) {
       const rPoly = rowFootprints.get(rowId);

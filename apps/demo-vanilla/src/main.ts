@@ -1,9 +1,10 @@
-import {
-  SAMPLE_FLOORPLAN,
-  type Floorplan,
-} from '@open-seats/core';
+import { SAMPLE_FLOORPLAN, type Floorplan } from '@open-seats/core';
 import { createViewer, type ViewerInstance } from '@open-seats/viewer';
-import { createEditor, type EditorInstance, type ToolType } from '@open-seats/editor';
+import {
+  createEditor,
+  type EditorInstance,
+  type ToolType,
+} from '@open-seats/editor';
 
 let currentFloorplan: Floorplan = structuredClone(SAMPLE_FLOORPLAN);
 let currentMode: 'viewer' | 'editor' = 'viewer';
@@ -11,22 +12,36 @@ let currentMode: 'viewer' | 'editor' = 'viewer';
 let viewerInstance: ViewerInstance | null = null;
 let editorInstance: EditorInstance | null = null;
 
-const canvasContainer = document.getElementById('canvasContainer') as HTMLDivElement;
+const canvasContainer = document.getElementById(
+  'canvasContainer'
+) as HTMLDivElement;
 const editorToolbar = document.getElementById('editorToolbar') as HTMLElement;
 const eventFeed = document.getElementById('eventFeed') as HTMLElement;
 const selectedPanel = document.getElementById('selectedPanel') as HTMLElement;
-const selectedSeatsList = document.getElementById('selectedSeatsList') as HTMLElement;
+const selectedSeatsList = document.getElementById(
+  'selectedSeatsList'
+) as HTMLElement;
 const selectionBadge = document.getElementById('selectionBadge') as HTMLElement;
 
-const btnModeViewer = document.getElementById('btnModeViewer') as HTMLButtonElement;
-const btnModeEditor = document.getElementById('btnModeEditor') as HTMLButtonElement;
+const btnModeViewer = document.getElementById(
+  'btnModeViewer'
+) as HTMLButtonElement;
+const btnModeEditor = document.getElementById(
+  'btnModeEditor'
+) as HTMLButtonElement;
 const btnUndo = document.getElementById('btnUndo') as HTMLButtonElement;
 const btnRedo = document.getElementById('btnRedo') as HTMLButtonElement;
-const btnToggleGrid = document.getElementById('btnToggleGrid') as HTMLButtonElement;
-const btnTogglePreview = document.getElementById('btnTogglePreview') as HTMLButtonElement;
+const btnToggleGrid = document.getElementById(
+  'btnToggleGrid'
+) as HTMLButtonElement;
+const btnTogglePreview = document.getElementById(
+  'btnTogglePreview'
+) as HTMLButtonElement;
 const btnZoomIn = document.getElementById('btnZoomIn') as HTMLButtonElement;
 const btnZoomOut = document.getElementById('btnZoomOut') as HTMLButtonElement;
-const btnResetZoom = document.getElementById('btnResetZoom') as HTMLButtonElement;
+const btnResetZoom = document.getElementById(
+  'btnResetZoom'
+) as HTMLButtonElement;
 const btnExport = document.getElementById('btnExport') as HTMLButtonElement;
 const btnReserve = document.getElementById('btnReserve') as HTMLButtonElement;
 const btnClearSel = document.getElementById('btnClearSel') as HTMLButtonElement;
@@ -107,24 +122,29 @@ function initViewerMode() {
     logEvent('deselected', ctx.seat.label);
   });
 
-  viewerInstance.on('selectionChanged', ({ selectedSeatIds, selectedSeats }) => {
-    const count = selectedSeatIds.length;
-    const countEl = document.getElementById('countSelected');
-    if (countEl) {
-      countEl.textContent = count.toString();
-    }
+  viewerInstance.on(
+    'selectionChanged',
+    ({ selectedSeatIds, selectedSeats }) => {
+      const count = selectedSeatIds.length;
+      const countEl = document.getElementById('countSelected');
+      if (countEl) {
+        countEl.textContent = count.toString();
+      }
 
-    if (count > 0) {
-      selectedPanel.style.display = 'block';
-      selectionBadge.style.display = 'inline-block';
-      selectionBadge.textContent = `${count} selected`;
-      selectedSeatsList.textContent = selectedSeats.map((s) => s.seat.label).join(', ');
-    } else {
-      selectedPanel.style.display = 'none';
-      selectionBadge.style.display = 'none';
-      selectedSeatsList.textContent = '';
+      if (count > 0) {
+        selectedPanel.style.display = 'block';
+        selectionBadge.style.display = 'inline-block';
+        selectionBadge.textContent = `${count} selected`;
+        selectedSeatsList.textContent = selectedSeats
+          .map((s) => s.seat.label)
+          .join(', ');
+      } else {
+        selectedPanel.style.display = 'none';
+        selectionBadge.style.display = 'none';
+        selectedSeatsList.textContent = '';
+      }
     }
-  });
+  );
 
   logEvent('mode', 'Switched to Viewer Mode');
 }
@@ -160,7 +180,9 @@ function initEditorMode() {
   });
 
   editorInstance.on('previewToggle', (isPreview) => {
-    btnTogglePreview.textContent = isPreview ? 'Back to Editor' : 'Toggle Preview';
+    btnTogglePreview.textContent = isPreview
+      ? 'Back to Editor'
+      : 'Toggle Preview';
     btnTogglePreview.classList.toggle('btn-primary', !isPreview);
     logEvent('preview', isPreview ? 'ON' : 'OFF');
   });

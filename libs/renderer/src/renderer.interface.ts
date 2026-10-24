@@ -34,15 +34,35 @@ export interface RendererOptions {
   selectedStyle?: SelectedStyle;
   hoverStyle?: HoverStyle;
   draggableNodes?: boolean;
-  onNodeClick?: (nodeId: string, nodeType: 'row' | 'zone' | 'building', evt: MouseEvent | TouchEvent) => void;
-  onNodeDragStart?: (nodeId: string, nodeType: 'row' | 'zone' | 'building') => void;
-  onNodeDragMove?: (nodeId: string, nodeType: 'row' | 'zone' | 'building', pos: Vec2) => void;
-  onNodeDragEnd?: (nodeId: string, nodeType: 'row' | 'zone' | 'building', pos: Vec2, evt: MouseEvent | TouchEvent) => void;
+  onNodeClick?: (
+    nodeId: string,
+    nodeType: 'row' | 'zone' | 'building',
+    evt: MouseEvent | TouchEvent
+  ) => void;
+  onNodeDragStart?: (
+    nodeId: string,
+    nodeType: 'row' | 'zone' | 'building'
+  ) => void;
+  onNodeDragMove?: (
+    nodeId: string,
+    nodeType: 'row' | 'zone' | 'building',
+    pos: Vec2
+  ) => void;
+  onNodeDragEnd?: (
+    nodeId: string,
+    nodeType: 'row' | 'zone' | 'building',
+    pos: Vec2,
+    evt: MouseEvent | TouchEvent
+  ) => void;
   onSeatClick?: (ctx: RenderSeatContext, evt: MouseEvent | TouchEvent) => void;
   onSeatHover?: (ctx: RenderSeatContext, evt: MouseEvent) => void;
   onSeatHoverEnd?: (ctx: RenderSeatContext, evt: MouseEvent) => void;
   onSelectionChange?: (selectedIds: string[]) => void;
-  onStageClick?: (pos: Vec2, evt: MouseEvent | TouchEvent, target?: unknown) => void;
+  onStageClick?: (
+    pos: Vec2,
+    evt: MouseEvent | TouchEvent,
+    target?: unknown
+  ) => void;
   onStageMouseMove?: (pos: Vec2, evt: MouseEvent) => void;
   onReady?: () => void;
 }
@@ -64,7 +84,11 @@ export interface Renderer {
   setStageDraggable(enabled: boolean): void;
   setCursor(cursor: string): void;
   renderDraftPolygon(points: Vec2[], previewPoint?: Vec2 | null): void;
-  renderDraftRectangle(corner1: Vec2, currentCorner: Vec2, isInvalid?: boolean): void;
+  renderDraftRectangle(
+    corner1: Vec2,
+    currentCorner: Vec2,
+    isInvalid?: boolean
+  ): void;
   clearDraftPolygon(): void;
   getPointerWorldPosition(): Vec2 | null;
   zoomIn(factor?: number): void;

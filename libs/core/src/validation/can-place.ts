@@ -12,8 +12,7 @@ import {
   zoneFootprint,
 } from '../geometry/footprints';
 import { isValidPolygon } from '../geometry/polygon';
-import type {
-  BoundingBox} from '../geometry/overlap';
+import type { BoundingBox } from '../geometry/overlap';
 import {
   boundingBoxesOverlap,
   computeBoundingBox,
@@ -68,7 +67,10 @@ function validateProposedBuilding(
 
   // Broadphase spatial index against other buildings
   const spatialIndex = new GridSpatialIndex(150);
-  const otherBuildingsMap = new Map<string, { poly: Vec2[]; box: BoundingBox }>();
+  const otherBuildingsMap = new Map<
+    string,
+    { poly: Vec2[]; box: BoundingBox }
+  >();
 
   for (const other of allBuildings) {
     if (other.id === original.id) continue;
@@ -85,7 +87,13 @@ function validateProposedBuilding(
 
     if (
       boundingBoxesOverlap(proposedBox, otherItem.box, tol) &&
-      polygonsOverlap(proposedPoly, otherItem.poly, tol, proposedBox, otherItem.box)
+      polygonsOverlap(
+        proposedPoly,
+        otherItem.poly,
+        tol,
+        proposedBox,
+        otherItem.box
+      )
     ) {
       violations.push({
         rule: 'building-overlap',
@@ -147,7 +155,15 @@ function validateProposedZone(
   const parentBox = computeBoundingBox(parentBuilding.points);
 
   // Check containment within parent building
-  if (!polygonContains(parentBuilding.points, proposedPoly, tol, parentBox, proposedBox)) {
+  if (
+    !polygonContains(
+      parentBuilding.points,
+      proposedPoly,
+      tol,
+      parentBox,
+      proposedBox
+    )
+  ) {
     violations.push({
       rule: 'out-of-bounds',
       ids: [original.id, parentBuilding.id],
@@ -227,7 +243,15 @@ function validateProposedRow(
   const parentBox = computeBoundingBox(parentBuilding.points);
 
   // Check containment within parent building
-  if (!polygonContains(parentBuilding.points, proposedPoly, tol, parentBox, proposedBox)) {
+  if (
+    !polygonContains(
+      parentBuilding.points,
+      proposedPoly,
+      tol,
+      parentBox,
+      proposedBox
+    )
+  ) {
     violations.push({
       rule: 'out-of-bounds',
       ids: [original.id, parentBuilding.id],
@@ -288,7 +312,12 @@ export function canPlace(
   // 1. Check if nodeId is a building
   const targetBuilding = buildings.find((b) => b.id === nodeId);
   if (targetBuilding) {
-    return validateProposedBuilding(targetBuilding, proposedTransform, buildings, tol);
+    return validateProposedBuilding(
+      targetBuilding,
+      proposedTransform,
+      buildings,
+      tol
+    );
   }
 
   // 2. Find parent building containing this zone or row

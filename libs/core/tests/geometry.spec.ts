@@ -50,12 +50,7 @@ describe('Geometry primitives', () => {
 
   it('computes polygon area and centroid', () => {
     // 10x10 square
-    const square = [
-      vec2(0, 0),
-      vec2(10, 0),
-      vec2(10, 10),
-      vec2(0, 10),
-    ];
+    const square = [vec2(0, 0), vec2(10, 0), vec2(10, 10), vec2(0, 10)];
     expect(polygonArea(square)).toBe(100);
     const centroid = polygonCentroid(square);
     expect(centroid.x).toBeCloseTo(5);
@@ -64,24 +59,14 @@ describe('Geometry primitives', () => {
 
   it('normalizes polygon winding to CCW', () => {
     // CW polygon (y down or clockwise in cartesian)
-    const cw = [
-      vec2(0, 0),
-      vec2(0, 10),
-      vec2(10, 10),
-      vec2(10, 0),
-    ];
+    const cw = [vec2(0, 0), vec2(0, 10), vec2(10, 10), vec2(10, 0)];
     expect(polygonSignedArea(cw)).toBeLessThan(0);
     const normalized = normalizeWinding(cw, 'ccw');
     expect(polygonSignedArea(normalized)).toBeGreaterThan(0);
   });
 
   it('detects point in polygon and points on boundary', () => {
-    const poly = [
-      vec2(0, 0),
-      vec2(10, 0),
-      vec2(10, 10),
-      vec2(0, 10),
-    ];
+    const poly = [vec2(0, 0), vec2(10, 0), vec2(10, 10), vec2(0, 10)];
 
     expect(pointInPolygon(vec2(5, 5), poly)).toBe(true);
     expect(pointInPolygon(vec2(15, 5), poly)).toBe(false);
@@ -114,33 +99,18 @@ describe('Geometry primitives', () => {
 
   it('detects bow-tie (self-intersecting) polygon -> invalid-polygon', () => {
     // Bow-tie: non-adjacent edges cross
-    const bowTie = [
-      vec2(0, 0),
-      vec2(10, 10),
-      vec2(0, 10),
-      vec2(10, 0),
-    ];
+    const bowTie = [vec2(0, 0), vec2(10, 10), vec2(0, 10), vec2(10, 0)];
     expect(isSelfIntersecting(bowTie)).toBe(true);
     expect(isValidPolygon(bowTie)).toBe(false);
 
     // Simple non-self-intersecting square is valid
-    const validSquare = [
-      vec2(0, 0),
-      vec2(10, 0),
-      vec2(10, 10),
-      vec2(0, 10),
-    ];
+    const validSquare = [vec2(0, 0), vec2(10, 0), vec2(10, 10), vec2(0, 10)];
     expect(isSelfIntersecting(validSquare)).toBe(false);
     expect(isValidPolygon(validSquare)).toBe(true);
   });
 
   it('computes bounding box, scales, and flips polygons correctly', () => {
-    const square = [
-      vec2(0, 0),
-      vec2(20, 0),
-      vec2(20, 10),
-      vec2(0, 10),
-    ];
+    const square = [vec2(0, 0), vec2(20, 0), vec2(20, 10), vec2(0, 10)];
     const bbox = polygonBoundingBox(square);
     expect(bbox.width).toBe(20);
     expect(bbox.height).toBe(10);
@@ -152,15 +122,10 @@ describe('Geometry primitives', () => {
     expect(scaledBbox.width).toBeCloseTo(40);
     expect(scaledBbox.height).toBeCloseTo(20);
 
-    const triangle = [
-      vec2(0, 0),
-      vec2(10, 0),
-      vec2(0, 10),
-    ];
+    const triangle = [vec2(0, 0), vec2(10, 0), vec2(0, 10)];
     const flippedH = flipPolygon(triangle, 'horizontal');
     expect(isValidPolygon(flippedH)).toBe(true);
     const flippedV = flipPolygon(triangle, 'vertical');
     expect(isValidPolygon(flippedV)).toBe(true);
   });
 });
-

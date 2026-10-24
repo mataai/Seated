@@ -205,7 +205,11 @@ export class KonvaRenderer implements Renderer {
     this.stage.on('click tap', (e) => {
       const worldPos = this.getPointerWorldPosition();
       if (worldPos && this.options.onStageClick) {
-        this.options.onStageClick(worldPos, e.evt as MouseEvent | TouchEvent, e.target);
+        this.options.onStageClick(
+          worldPos,
+          e.evt as MouseEvent | TouchEvent,
+          e.target
+        );
       }
     });
 
@@ -553,7 +557,9 @@ export class KonvaRenderer implements Renderer {
       const isSelected = this.selectedSeatIds.has(seat.id);
       const isHovered = this.hoveredSeatId === seat.id;
       const statusKey =
-        this.seatStatuses.get(seat.id) ?? this.options.defaultStatus ?? 'available';
+        this.seatStatuses.get(seat.id) ??
+        this.options.defaultStatus ??
+        'available';
       const statusDef = this.statusRegistry.get(statusKey);
 
       const seatCircle = new Konva.Circle({
@@ -623,7 +629,9 @@ export class KonvaRenderer implements Renderer {
     if (isSelected) {
       circle.fill(selStyle.fill ?? DEFAULT_SELECTED_STYLE.fill);
       circle.stroke(selStyle.stroke ?? DEFAULT_SELECTED_STYLE.stroke);
-      circle.strokeWidth(selStyle.strokeWidth ?? DEFAULT_SELECTED_STYLE.strokeWidth);
+      circle.strokeWidth(
+        selStyle.strokeWidth ?? DEFAULT_SELECTED_STYLE.strokeWidth
+      );
       circle.opacity(1);
     } else {
       circle.fill(statusDef.style.fill);
@@ -634,7 +642,9 @@ export class KonvaRenderer implements Renderer {
 
     if (isHovered && !isSelected) {
       circle.stroke(hovStyle.stroke ?? DEFAULT_HOVER_STYLE.stroke);
-      circle.strokeWidth(hovStyle.strokeWidth ?? DEFAULT_HOVER_STYLE.strokeWidth);
+      circle.strokeWidth(
+        hovStyle.strokeWidth ?? DEFAULT_HOVER_STYLE.strokeWidth
+      );
     }
   }
 
@@ -666,9 +676,7 @@ export class KonvaRenderer implements Renderer {
 
   public getStatus(seatId: string): string {
     return (
-      this.seatStatuses.get(seatId) ??
-      this.options.defaultStatus ??
-      'available'
+      this.seatStatuses.get(seatId) ?? this.options.defaultStatus ?? 'available'
     );
   }
 
@@ -691,7 +699,12 @@ export class KonvaRenderer implements Renderer {
       const circle = this.seatCircles.get(id);
       if (circle) {
         const statusDef = this.statusRegistry.get(this.getStatus(id));
-        this.applySeatStyle(circle, statusDef, false, this.hoveredSeatId === id);
+        this.applySeatStyle(
+          circle,
+          statusDef,
+          false,
+          this.hoveredSeatId === id
+        );
       }
     }
     this.sceneLayer.batchDraw();
@@ -703,7 +716,12 @@ export class KonvaRenderer implements Renderer {
       const circle = this.seatCircles.get(id);
       if (circle) {
         const statusDef = this.statusRegistry.get(this.getStatus(id));
-        this.applySeatStyle(circle, statusDef, false, this.hoveredSeatId === id);
+        this.applySeatStyle(
+          circle,
+          statusDef,
+          false,
+          this.hoveredSeatId === id
+        );
       }
     }
     this.selectedSeatIds.clear();
@@ -783,7 +801,9 @@ export class KonvaRenderer implements Renderer {
     if (this.hoveredSeatId) {
       const prevCircle = this.seatCircles.get(this.hoveredSeatId);
       if (prevCircle) {
-        const statusDef = this.statusRegistry.get(this.getStatus(this.hoveredSeatId));
+        const statusDef = this.statusRegistry.get(
+          this.getStatus(this.hoveredSeatId)
+        );
         const isSelected = this.selectedSeatIds.has(this.hoveredSeatId);
         this.applySeatStyle(prevCircle, statusDef, isSelected, false);
       }
@@ -884,7 +904,8 @@ export class KonvaRenderer implements Renderer {
       points.length >= 3 &&
       previewPoint &&
       points.some(
-        (p) => Math.hypot(p.x - previewPoint.x, p.y - previewPoint.y) <= 14 / scale
+        (p) =>
+          Math.hypot(p.x - previewPoint.x, p.y - previewPoint.y) <= 14 / scale
       );
 
     // 1. Translucent fill preview if >= 3 points
@@ -892,7 +913,9 @@ export class KonvaRenderer implements Renderer {
       const fillPoly = new Konva.Line({
         points: this.flattenPoints(allPts),
         closed: true,
-        fill: isClosing ? 'rgba(16, 185, 129, 0.22)' : 'rgba(99, 102, 241, 0.12)',
+        fill: isClosing
+          ? 'rgba(16, 185, 129, 0.22)'
+          : 'rgba(99, 102, 241, 0.12)',
         listening: false,
       });
       this.overlayLayer.add(fillPoly);

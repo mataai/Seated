@@ -11,7 +11,10 @@ export default defineConfig(() => ({
     alias: {
       konva: path.resolve(__dirname, '../../node_modules/konva/lib/index.js'),
       '@open-seats/core': path.resolve(__dirname, '../core/src/index.ts'),
-      '@open-seats/renderer': path.resolve(__dirname, '../renderer/src/index.ts'),
+      '@open-seats/renderer': path.resolve(
+        __dirname,
+        '../renderer/src/index.ts'
+      ),
       '@open-seats/viewer': path.resolve(__dirname, '../viewer/src/index.ts'),
       '@open-seats/editor': path.resolve(__dirname, '../editor/src/index.ts'),
     },

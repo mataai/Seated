@@ -45,8 +45,14 @@ describe('Viewer (@open-seats/viewer)', () => {
 
   beforeEach(() => {
     container = document.createElement('div');
-    Object.defineProperty(container, 'clientWidth', { value: 800, configurable: true });
-    Object.defineProperty(container, 'clientHeight', { value: 600, configurable: true });
+    Object.defineProperty(container, 'clientWidth', {
+      value: 800,
+      configurable: true,
+    });
+    Object.defineProperty(container, 'clientHeight', {
+      value: 600,
+      configurable: true,
+    });
     document.body.appendChild(container);
   });
 
@@ -147,7 +153,10 @@ describe('Viewer (@open-seats/viewer)', () => {
 
     const ctx = viewer.getSelectedSeats();
     // Simulate hover
-    const mouseEvt = new MouseEvent('mousemove', { clientX: 100, clientY: 100 });
+    const mouseEvt = new MouseEvent('mousemove', {
+      clientX: 100,
+      clientY: 100,
+    });
     const seatCtx = {
       seat: validPlan.buildings[0].rows[0].seats[0],
       row: validPlan.buildings[0].rows[0],
@@ -193,7 +202,10 @@ describe('Viewer (@open-seats/viewer)', () => {
     };
 
     const tooltipManager = (viewer as any).tooltipManager;
-    tooltipManager.show(seatCtx, new MouseEvent('mousemove', { clientX: 10, clientY: 10 }));
+    tooltipManager.show(
+      seatCtx,
+      new MouseEvent('mousemove', { clientX: 10, clientY: 10 })
+    );
     await vi.advanceTimersByTimeAsync(10);
 
     const tooltipEl = tooltipManager.tooltipEl as HTMLElement;
@@ -230,28 +242,40 @@ describe('Viewer (@open-seats/viewer)', () => {
     });
 
     // Press ArrowRight -> focuses first seat (s-1)
-    container.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
+    );
     expect((viewer as any).renderer.getHoveredSeatId()).toBe('s-1');
 
     // Press ArrowRight again -> focuses next seat to the right (s-2)
-    container.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
+    );
     expect((viewer as any).renderer.getHoveredSeatId()).toBe('s-2');
 
     // Press Space -> selects s-2
-    container.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: ' ', bubbles: true })
+    );
     expect(viewer.getSelectedSeatIds()).toContain('s-2');
 
     // Press Space again -> deselects s-2
-    container.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: ' ', bubbles: true })
+    );
     expect(viewer.getSelectedSeatIds()).not.toContain('s-2');
 
     // Press + -> zooms in
     const initialScale = viewer.getScale();
-    container.dispatchEvent(new KeyboardEvent('keydown', { key: '+', bubbles: true }));
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: '+', bubbles: true })
+    );
     expect(viewer.getScale()).toBeGreaterThan(initialScale);
 
     // Press 0 -> resets zoom
-    container.dispatchEvent(new KeyboardEvent('keydown', { key: '0', bubbles: true }));
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: '0', bubbles: true })
+    );
     expect(viewer.getScale()).toBe(1);
   });
 });

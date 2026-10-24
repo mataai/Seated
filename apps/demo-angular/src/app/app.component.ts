@@ -54,7 +54,12 @@ export class AppComponent {
   private logIdCounter = 0;
   public selectedSeatIds: string[] = [];
   public selectedSeatLabels: string[] = [];
-  public eventLog: { id: number; time: string; name: string; detail: string }[] = [];
+  public eventLog: {
+    id: number;
+    time: string;
+    name: string;
+    detail: string;
+  }[] = [];
 
   public setMode(newMode: 'viewer' | 'editor'): void {
     if (this.mode === newMode) return;
@@ -150,7 +155,10 @@ export class AppComponent {
       }
       this.statuses = updateMap;
       this.viewerComp.clearSelection();
-      this.addLog('reserved', `Reserved ${this.selectedSeatIds.length} seat(s)`);
+      this.addLog(
+        'reserved',
+        `Reserved ${this.selectedSeatIds.length} seat(s)`
+      );
       this.cdr.markForCheck();
     }
   }

@@ -14,11 +14,7 @@ import {
   type RenderSeatContext,
 } from '@open-seats/renderer';
 import { TooltipManager } from './tooltip';
-import type {
-  ViewerEvents,
-  ViewerInstance,
-  ViewerOptions,
-} from './types';
+import type { ViewerEvents, ViewerInstance, ViewerOptions } from './types';
 
 export class Viewer implements ViewerInstance {
   private container: HTMLElement;

@@ -10,12 +10,7 @@ import type {
 } from '@open-seats/core';
 
 export type ToolType =
-  | 'select'
-  | 'pan'
-  | 'building'
-  | 'row'
-  | 'zone'
-  | 'add-seat';
+  'select' | 'pan' | 'building' | 'row' | 'zone' | 'add-seat';
 
 export interface EditorRulesConfig {
   enforce: boolean;
@@ -47,7 +42,6 @@ export interface EditorEvents {
   buildingCreationCancelled: void;
   buildingCreationFailed: { reason: string; violations?: Violation[] };
 }
-
 
 export interface EditorInstance {
   loadFloorplan(floorplan: Floorplan): void;
@@ -84,14 +78,23 @@ export interface EditorInstance {
   getScale(): number;
 
   // Programmatic shape creation with strict validation
-  createBuilding(points: Vec2[], label?: string, position?: Vec2): Building | null;
+  createBuilding(
+    points: Vec2[],
+    label?: string,
+    position?: Vec2
+  ): Building | null;
   createRectangleBuilding(
     position: Vec2,
     width: number,
     height: number,
     label?: string
   ): Building | null;
-  createZone(buildingId: string, points: Vec2[], fill: string, position?: Vec2): Zone | null;
+  createZone(
+    buildingId: string,
+    points: Vec2[],
+    fill: string,
+    position?: Vec2
+  ): Zone | null;
   createRectangleZone(
     buildingId: string,
     position: Vec2,
@@ -111,7 +114,11 @@ export interface EditorInstance {
       rotation?: number;
     }
   ): Row | null;
-  addSeatToRow(buildingId: string, rowId: string, side?: 'a' | 'b'): Seat | null;
+  addSeatToRow(
+    buildingId: string,
+    rowId: string,
+    side?: 'a' | 'b'
+  ): Seat | null;
   addSeatOnCanvas(buildingId: string, position: Vec2): Row | null;
   moveSeatToRow(
     sourceRowId: string,
@@ -119,7 +126,6 @@ export interface EditorInstance {
     targetRowId: string,
     targetSide?: 'a' | 'b'
   ): boolean;
-
 
   // Context Actions (Clipboard & Flip)
   copySelection(): boolean;
@@ -155,7 +161,11 @@ export interface EditorInstance {
   setShapeDimensions(nodeId: string, width: number, height: number): boolean;
 
   // Polygon vertex editing for buildings and zones
-  moveVertex(polygonNodeId: string, vertexIndex: number, newPosition: Vec2): boolean;
+  moveVertex(
+    polygonNodeId: string,
+    vertexIndex: number,
+    newPosition: Vec2
+  ): boolean;
   addVertex(polygonNodeId: string, afterIndex: number, newPoint: Vec2): boolean;
   deleteVertex(polygonNodeId: string, vertexIndex: number): boolean;
 
@@ -169,4 +179,3 @@ export interface EditorInstance {
   ): void;
   destroy(): void;
 }
-

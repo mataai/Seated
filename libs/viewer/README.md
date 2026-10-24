@@ -3,6 +3,7 @@
 Interactive seat selection and reservation viewer element for OpenSeats.
 
 ## Key Features
+
 - **Imperative API**: Simple `createViewer(container, options)` with lifecycle `.destroy()`.
 - **Selection Management**: Multi-seat selection, `maxSelectable` limits (e.g. single-selection auto-deselect), and selection event streams.
 - **Dynamic Statuses**: `setStatuses({ [seatId]: statusKey })` and `setStatus(seatId, key)` for live reservation tracking.
@@ -11,6 +12,7 @@ Interactive seat selection and reservation viewer element for OpenSeats.
 - **Lenient Mode**: Inspects and records layout violations in `viewer.violations` without interrupting rendering.
 
 ## Quick Start
+
 ```typescript
 import { createViewer } from '@open-seats/viewer';
 

@@ -61,28 +61,30 @@ apps/
 Install only the packages required by your application:
 
 ### Vanilla JS / TypeScript
+
 ```bash
 npm install @open-seats/viewer @open-seats/editor
 ```
 
 ### Angular (19–22)
+
 ```bash
 npm install @open-seats/angular @open-seats/viewer @open-seats/editor
 ```
 
-*(Note: `@open-seats/core` and `@open-seats/renderer` are installed automatically as dependencies).*
+_(Note: `@open-seats/core` and `@open-seats/renderer` are installed automatically as dependencies)._
 
 ---
 
 ## Core Vocabulary
 
-| Term | Meaning |
-| :--- | :--- |
-| **Floorplan** | Root document JSON containing dimensions, background image configuration, and buildings. |
-| **Building** | A free-form polygon container for zones and rows. Moving a building translates its children. |
-| **Zone** | A non-seating free-form polygon inside a building (stage, bar, dance floor, aisle, sound booth). |
-| **Row** | A table or seating line with seats on one or both opposing sides (`tableWidth: 0` for bare seat lines). |
-| **Seat** | An individual seat belonging to a row with a stable ID, label, and coordinates. |
+| Term          | Meaning                                                                                                 |
+| :------------ | :------------------------------------------------------------------------------------------------------ |
+| **Floorplan** | Root document JSON containing dimensions, background image configuration, and buildings.                |
+| **Building**  | A free-form polygon container for zones and rows. Moving a building translates its children.            |
+| **Zone**      | A non-seating free-form polygon inside a building (stage, bar, dance floor, aisle, sound booth).        |
+| **Row**       | A table or seating line with seats on one or both opposing sides (`tableWidth: 0` for bare seat lines). |
+| **Seat**      | An individual seat belonging to a row with a stable ID, label, and coordinates.                         |
 
 ---
 
@@ -132,12 +134,15 @@ const editor = createEditor(container, {
 });
 
 // Create a building polygon
-const building = editor.createBuilding([
-  { x: 0, y: 0 },
-  { x: 800, y: 0 },
-  { x: 800, y: 600 },
-  { x: 0, y: 600 },
-], 'Main Auditorium');
+const building = editor.createBuilding(
+  [
+    { x: 0, y: 0 },
+    { x: 800, y: 0 },
+    { x: 800, y: 600 },
+    { x: 0, y: 600 },
+  ],
+  'Main Auditorium'
+);
 
 // Add a row of seats to the building
 const row = editor.createRow(building.id, { x: 100, y: 150 }, 8, {
@@ -167,22 +172,16 @@ import { SAMPLE_FLOORPLAN, type Floorplan } from '@open-seats/core';
   selector: 'app-booking',
   standalone: true,
   imports: [SeatsViewerComponent, SeatsEditorComponent],
-  template: `
-    <seats-viewer
-      [floorplan]="floorplan"
-      [statuses]="seatStatuses"
-      [maxSelectable]="4"
-      (selectionChanged)="onSelectionChanged($event)"
-      (seatSelected)="onSeatSelected($event)"
-    />
-  `,
-  styles: [`
-    :host {
-      display: block;
-      width: 100vw;
-      height: 100vh;
-    }
-  `],
+  template: ` <seats-viewer [floorplan]="floorplan" [statuses]="seatStatuses" [maxSelectable]="4" (selectionChanged)="onSelectionChanged($event)" (seatSelected)="onSeatSelected($event)" /> `,
+  styles: [
+    `
+      :host {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+    `,
+  ],
 })
 export class BookingComponent {
   floorplan: Floorplan = SAMPLE_FLOORPLAN;
@@ -206,6 +205,7 @@ export class BookingComponent {
 ## Key Features
 
 ### Editor Features
+
 - **Tools**: `select`, `pan`, `building` (draw polygon), `zone` (draw non-seating area), `row` (place table/row), `add-seat`.
 - **Row Configuration**: Single-sided or double-sided (`both`), customizable seat spacing, seat radius, table width, label numbering.
 - **Vertex Editing**: Directly drag polygon vertices to reshape buildings and zones.
@@ -214,6 +214,7 @@ export class BookingComponent {
 - **Embedded Preview**: Seamlessly toggle between editing mode and viewer reservation mode.
 
 ### Viewer Features
+
 - **Selection Handling**: Single and multi-seat selection with configurable `maxSelectable`.
 - **Status Registry**: Map seat statuses (e.g. `available`, `reserved`, `locked`, `vip`) with custom colors and selectable flags.
 - **Async Tooltips**: Built-in debounced tooltip resolver supporting async data fetching (e.g., live pricing or seat views).
@@ -234,12 +235,13 @@ The viewer strictly implements ARIA accessibility standards:
 - **Shift + Arrow Keys**: Pan floorplan view.
 
 #### Editor Shortcuts
-| Shortcut | Action |
-| :--- | :--- |
-| `Ctrl+Z` / `Cmd+Z` | Undo |
-| `Ctrl+Shift+Z` / `Ctrl+Y` | Redo |
-| `Delete` / `Backspace` | Delete selected building, zone, row, or seat |
-| `Escape` | Clear current selection |
+
+| Shortcut                  | Action                                       |
+| :------------------------ | :------------------------------------------- |
+| `Ctrl+Z` / `Cmd+Z`        | Undo                                         |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | Redo                                         |
+| `Delete` / `Backspace`    | Delete selected building, zone, row, or seat |
+| `Escape`                  | Clear current selection                      |
 
 ### Layout Invariants & Validation
 
@@ -261,18 +263,20 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
 ### Viewer Options & Events
 
 #### `ViewerOptions`
-| Option | Type | Description |
-| :--- | :--- | :--- |
-| `floorplan` | `Floorplan` | The floorplan JSON object to render. |
-| `statuses` | `Record<string, string>` | Map of seat IDs to status names (e.g. `'reserved'`, `'booked'`). |
-| `statusDefinitions` | `SeatStatusDefinition[]` | Custom status configurations (colors, selectability). |
-| `maxSelectable` | `number` | Maximum number of seats selectable simultaneously. |
-| `selectedSeatIds` | `string[]` | Initial pre-selected seat IDs. |
-| `tooltipProvider` | `TooltipProvider` | Async function returning tooltip title, subtitle, or content. |
-| `tooltipDebounceMs` | `number` | Debounce delay in ms before showing tooltip (default: `150`). |
-| `enableKeyboardNavigation` | `boolean` | Enable spatial 2D arrow navigation and accessibility (default: `true`). |
+
+| Option                     | Type                     | Description                                                             |
+| :------------------------- | :----------------------- | :---------------------------------------------------------------------- |
+| `floorplan`                | `Floorplan`              | The floorplan JSON object to render.                                    |
+| `statuses`                 | `Record<string, string>` | Map of seat IDs to status names (e.g. `'reserved'`, `'booked'`).        |
+| `statusDefinitions`        | `SeatStatusDefinition[]` | Custom status configurations (colors, selectability).                   |
+| `maxSelectable`            | `number`                 | Maximum number of seats selectable simultaneously.                      |
+| `selectedSeatIds`          | `string[]`               | Initial pre-selected seat IDs.                                          |
+| `tooltipProvider`          | `TooltipProvider`        | Async function returning tooltip title, subtitle, or content.           |
+| `tooltipDebounceMs`        | `number`                 | Debounce delay in ms before showing tooltip (default: `150`).           |
+| `enableKeyboardNavigation` | `boolean`                | Enable spatial 2D arrow navigation and accessibility (default: `true`). |
 
 #### `ViewerEvents`
+
 - `ready`: Viewer initialized and ready.
 - `seatHovered` / `seatHoverEnded`: Triggered when pointer moves over/off a seat.
 - `seatSelected` / `seatDeselected`: Triggered when an individual seat is clicked or selected via keyboard.
@@ -285,13 +289,15 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
 ### Editor Options, Tools & Events
 
 #### `EditorOptions`
-| Option | Type | Description |
-| :--- | :--- | :--- |
-| `floorplan` | `Floorplan` | Initial floorplan data to load. |
-| `rules` | `{ enforce: boolean; tolerance: number }` | Layout invariant enforcement settings. |
-| `gridSnapping` | `{ enabled: boolean; size: number }` | Grid snapping toggle and grid spacing in pixels. |
+
+| Option         | Type                                      | Description                                      |
+| :------------- | :---------------------------------------- | :----------------------------------------------- |
+| `floorplan`    | `Floorplan`                               | Initial floorplan data to load.                  |
+| `rules`        | `{ enforce: boolean; tolerance: number }` | Layout invariant enforcement settings.           |
+| `gridSnapping` | `{ enabled: boolean; size: number }`      | Grid snapping toggle and grid spacing in pixels. |
 
 #### `EditorTools`
+
 - `'select'`: Select, move, and edit elements or vertices.
 - `'pan'`: Pan the canvas without selecting elements.
 - `'building'`: Click to add vertices and create building polygons.
@@ -300,6 +306,7 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
 - `'add-seat'`: Append seats to existing rows.
 
 #### `EditorEvents`
+
 - `change`: Emitted with the updated `Floorplan` after any modification.
 - `toolChange`: Emitted when active tool changes.
 - `selectionChange`: Emitted with an array of selected element IDs.
@@ -311,6 +318,7 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
 ### Angular Components Reference
 
 #### `<seats-viewer>`
+
 - **Inputs**:
   - `[floorplan]`: `Floorplan`
   - `[statuses]`: `Record<string, string>`
@@ -327,6 +335,7 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
   - `(violationsUpdated)`
 
 #### `<seats-editor>`
+
 - **Inputs**:
   - `[floorplan]`: `Floorplan`
   - `[tool]`: `ToolType` (default `'select'`)
@@ -343,30 +352,37 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
 ## Running Demos & Development
 
 ### Start the Angular Demo Application
+
 ```bash
 npm start
 # or
 npx nx serve ng-demo
 ```
+
 Access the application at [http://localhost:4200](http://localhost:4200).
 
 ### Start the Vanilla TypeScript Demo
+
 ```bash
 npx nx serve demo-vanilla
 ```
+
 Access the application at [http://localhost:5173](http://localhost:5173).
 
 ### Run All Unit Tests
+
 ```bash
 npx nx run-many -t test
 ```
 
 ### Build All Packages and Applications
+
 ```bash
 npx nx run-many -t build
 ```
 
 ### Run Code Quality & Lint Checks
+
 ```bash
 npx nx run-many -t lint
 ```

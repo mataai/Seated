@@ -21,7 +21,7 @@ import {
 } from '@open-seats/core';
 import { createRenderer, type Renderer } from '@open-seats/renderer';
 import { createViewer, type ViewerInstance } from '@open-seats/viewer';
-import type { Command} from './history/command-stack';
+import type { Command } from './history/command-stack';
 import { CommandStack } from './history/command-stack';
 import { NumberingService } from './numbering/numbering-service';
 import type {
@@ -146,7 +146,8 @@ export class Editor implements EditorInstance {
   private onKeyDown = (e: KeyboardEvent): void => {
     if (e.defaultPrevented) return;
 
-    const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
+    const activeEl =
+      typeof document !== 'undefined' ? document.activeElement : null;
     const isTextInputActive =
       activeEl &&
       (activeEl.tagName === 'INPUT' ||
@@ -399,7 +400,8 @@ export class Editor implements EditorInstance {
       this.emitter.emit('buildingCreationCompleted', createdBuilding);
     } else {
       this.emitter.emit('buildingCreationFailed', {
-        reason: 'Cannot create building: outline overlaps with an existing building.',
+        reason:
+          'Cannot create building: outline overlaps with an existing building.',
       });
     }
     return createdBuilding;
@@ -413,7 +415,10 @@ export class Editor implements EditorInstance {
     return [...this.draftBuildingPoints];
   }
 
-  private handleStageClick(worldPos: Vec2, _evt: MouseEvent | TouchEvent): void {
+  private handleStageClick(
+    worldPos: Vec2,
+    _evt: MouseEvent | TouchEvent
+  ): void {
     if (!this.isDrawingBuilding) return;
 
     if (this.buildingCreationMode === 'rectangle') {
@@ -422,7 +427,9 @@ export class Editor implements EditorInstance {
       // Corner 1: set starting corner
       if (this.draftBuildingPoints.length === 0) {
         this.draftBuildingPoints.push(snappedPos);
-        this.emitter.emit('buildingCreationPointsChange', [...this.draftBuildingPoints]);
+        this.emitter.emit('buildingCreationPointsChange', [
+          ...this.draftBuildingPoints,
+        ]);
         this.renderer?.renderDraftRectangle(snappedPos, snappedPos);
         return;
       }
@@ -500,14 +507,17 @@ export class Editor implements EditorInstance {
     const ptToAdd = this.snap(worldPos);
 
     if (this.draftBuildingPoints.length > 0) {
-      const lastPt = this.draftBuildingPoints[this.draftBuildingPoints.length - 1];
+      const lastPt =
+        this.draftBuildingPoints[this.draftBuildingPoints.length - 1];
       if (Math.hypot(lastPt.x - ptToAdd.x, lastPt.y - ptToAdd.y) <= 2) {
         return;
       }
     }
 
     this.draftBuildingPoints.push(ptToAdd);
-    this.emitter.emit('buildingCreationPointsChange', [...this.draftBuildingPoints]);
+    this.emitter.emit('buildingCreationPointsChange', [
+      ...this.draftBuildingPoints,
+    ]);
     this.renderer?.renderDraftPolygon(this.draftBuildingPoints, ptToAdd);
   }
 
@@ -799,7 +809,9 @@ export class Editor implements EditorInstance {
       const testPlan: Floorplan = {
         ...this.floorplan,
         buildings: this.floorplan.buildings.map((b) =>
-          b.id === buildingId ? { ...b, zones: [...(b.zones ?? []), newZone] } : b
+          b.id === buildingId
+            ? { ...b, zones: [...(b.zones ?? []), newZone] }
+            : b
         ),
       };
 
@@ -1227,9 +1239,7 @@ export class Editor implements EditorInstance {
     const command: Command = {
       name: `Reparent Row ${movingRow.label} to ${targetBuilding.label}`,
       execute: () => {
-        srcBuilding.rows = srcBuilding.rows.filter(
-          (r) => r.id !== rowId
-        );
+        srcBuilding.rows = srcBuilding.rows.filter((r) => r.id !== rowId);
         movingRow.position = proposedRow.position;
         movingRow.rotation = proposedRow.rotation;
         targetBuilding.rows.push(movingRow);
@@ -1636,7 +1646,6 @@ export class Editor implements EditorInstance {
     return true;
   }
 
-
   // Context Actions: Copy, Cut, Paste, Duplicate, Flip
   public copySelection(): boolean {
     if (this.selectedNodeIds.length === 0) return false;
@@ -1691,15 +1700,21 @@ export class Editor implements EditorInstance {
     return this.clipboard !== null;
   }
 
-  private resolveTargetBuilding(targetBuildingId?: string): Building | undefined {
+  private resolveTargetBuilding(
+    targetBuildingId?: string
+  ): Building | undefined {
     if (targetBuildingId) {
-      const found = this.floorplan.buildings.find((b) => b.id === targetBuildingId);
+      const found = this.floorplan.buildings.find(
+        (b) => b.id === targetBuildingId
+      );
       if (found) return found;
     }
 
     if (this.selectedNodeIds.length > 0) {
       const selId = this.selectedNodeIds[0];
-      const selectedBuilding = this.floorplan.buildings.find((b) => b.id === selId);
+      const selectedBuilding = this.floorplan.buildings.find(
+        (b) => b.id === selId
+      );
       if (selectedBuilding) return selectedBuilding;
 
       for (const building of this.floorplan.buildings) {
@@ -1766,7 +1781,10 @@ export class Editor implements EditorInstance {
         x: original.position.x + cand.x,
         y: original.position.y + cand.y,
       });
-      const candidateBuilding: Building = { ...newBuildingTemplate, position: newPos };
+      const candidateBuilding: Building = {
+        ...newBuildingTemplate,
+        position: newPos,
+      };
 
       if (!this.rules.enforce) {
         placedBuilding = candidateBuilding;
@@ -1807,7 +1825,11 @@ export class Editor implements EditorInstance {
     return true;
   }
 
-  private pasteZone(original: Zone, targetBuilding: Building, offset: Vec2): boolean {
+  private pasteZone(
+    original: Zone,
+    targetBuilding: Building,
+    offset: Vec2
+  ): boolean {
     const newId = NumberingService.nextZoneId();
     const bbox = polygonBoundingBox(original.points);
     const zWidth = Math.round(bbox.width || 120);
@@ -1883,7 +1905,11 @@ export class Editor implements EditorInstance {
     return true;
   }
 
-  private pasteRow(original: Row, targetBuilding: Building, offset: Vec2): boolean {
+  private pasteRow(
+    original: Row,
+    targetBuilding: Building,
+    offset: Vec2
+  ): boolean {
     const newId = NumberingService.nextRowId();
     const nextLetter = NumberingService.rowLabel(targetBuilding.rows.length);
 
@@ -1901,7 +1927,8 @@ export class Editor implements EditorInstance {
     };
     newRowTemplate.seats = NumberingService.renumberRowSeats(newRowTemplate);
 
-    const rowHeight = (original.tableWidth ?? 28) + (original.seatRadius ?? 14) * 4;
+    const rowHeight =
+      (original.tableWidth ?? 28) + (original.seatRadius ?? 14) * 4;
     const verticalStep = Math.max(70, Math.round(rowHeight + 10));
 
     const existingRows = targetBuilding.rows ?? [];
@@ -1976,7 +2003,10 @@ export class Editor implements EditorInstance {
     return true;
   }
 
-  public paste(targetBuildingId?: string, offset: Vec2 = { x: 30, y: 30 }): boolean {
+  public paste(
+    targetBuildingId?: string,
+    offset: Vec2 = { x: 30, y: 30 }
+  ): boolean {
     if (!this.clipboard) return false;
 
     if (this.clipboard.type === 'building') {
@@ -2358,7 +2388,6 @@ export class Editor implements EditorInstance {
     const scaleY = height / bbox.height;
     return this.scaleShape(nodeId, scaleX, scaleY);
   }
-
 
   // ----------------------------------------------------
   // Polygon Vertex Editing (Buildings and Zones)

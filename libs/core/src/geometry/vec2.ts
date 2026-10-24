@@ -69,7 +69,11 @@ export function rotate(v: Vec2, angleDeg: number): Vec2 {
   return rotateRad(v, degToRad(angleDeg));
 }
 
-export function transformPoint(point: Vec2, origin: Vec2, rotationDeg: number): Vec2 {
+export function transformPoint(
+  point: Vec2,
+  origin: Vec2,
+  rotationDeg: number
+): Vec2 {
   if (rotationDeg === 0) {
     return { x: origin.x + point.x, y: origin.y + point.y };
   }
@@ -82,7 +86,11 @@ export function transformPoint(point: Vec2, origin: Vec2, rotationDeg: number): 
   };
 }
 
-export function inverseTransformPoint(point: Vec2, origin: Vec2, rotationDeg: number): Vec2 {
+export function inverseTransformPoint(
+  point: Vec2,
+  origin: Vec2,
+  rotationDeg: number
+): Vec2 {
   const dx = point.x - origin.x;
   const dy = point.y - origin.y;
   if (rotationDeg === 0) {

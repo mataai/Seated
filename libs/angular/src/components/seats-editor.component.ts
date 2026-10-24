@@ -3,7 +3,8 @@ import type {
   ElementRef,
   OnChanges,
   OnDestroy,
-  SimpleChanges} from '@angular/core';
+  SimpleChanges,
+} from '@angular/core';
 import {
   Component,
   EventEmitter,
@@ -126,8 +127,13 @@ export class SeatsEditorComponent
   }
 
   public get selectedBuilding(): Building | null {
-    if (!this.selectedNodeId || this.selectedNodeType !== 'building') return null;
-    return this.currentFloorplan?.buildings.find((b) => b.id === this.selectedNodeId) ?? null;
+    if (!this.selectedNodeId || this.selectedNodeType !== 'building')
+      return null;
+    return (
+      this.currentFloorplan?.buildings.find(
+        (b) => b.id === this.selectedNodeId
+      ) ?? null
+    );
   }
 
   public get selectedZone(): { zone: Zone; building: Building } | null {
@@ -152,7 +158,10 @@ export class SeatsEditorComponent
     return null;
   }
 
-  public get selectedShapeDimensions(): { width: number; height: number } | null {
+  public get selectedShapeDimensions(): {
+    width: number;
+    height: number;
+  } | null {
     if (this.selectedBuilding) {
       const bbox = polygonBoundingBox(this.selectedBuilding.points);
       return { width: Math.round(bbox.width), height: Math.round(bbox.height) };
@@ -252,7 +261,9 @@ export class SeatsEditorComponent
       this.editor.on('buildingCreationStarted', (mode) => {
         this.ngZone.run(() => {
           this.isDrawingBuilding = true;
-          this.buildingCreationMode = mode || (this.buildingDrawMode === 'rect' ? 'rectangle' : 'outline');
+          this.buildingCreationMode =
+            mode ||
+            (this.buildingDrawMode === 'rect' ? 'rectangle' : 'outline');
           this.draftPointsCount = 0;
           this.buildingCreationError = null;
           this.cdr.markForCheck();
@@ -556,8 +567,12 @@ export class SeatsEditorComponent
     position?: Vec2
   ): Zone | null {
     const res =
-      this.editor?.createZone(buildingId, points, fill ?? '#555555', position) ??
-      null;
+      this.editor?.createZone(
+        buildingId,
+        points,
+        fill ?? '#555555',
+        position
+      ) ?? null;
     this.cdr.markForCheck();
     return res;
   }
@@ -701,8 +716,12 @@ export class SeatsEditorComponent
     targetSide?: 'a' | 'b'
   ): boolean {
     const res =
-      this.editor?.moveSeatToRow(sourceRowId, seatId, targetRowId, targetSide) ??
-      false;
+      this.editor?.moveSeatToRow(
+        sourceRowId,
+        seatId,
+        targetRowId,
+        targetSide
+      ) ?? false;
     this.cdr.markForCheck();
     return res;
   }
@@ -862,7 +881,10 @@ export class SeatsEditorComponent
   // -------------------------------------------------------------
   // Row Properties Adjustments
   // -------------------------------------------------------------
-  public setRowSide(rowIdOrSide: string | 'one' | 'both', side?: 'one' | 'both'): boolean {
+  public setRowSide(
+    rowIdOrSide: string | 'one' | 'both',
+    side?: 'one' | 'both'
+  ): boolean {
     if (side !== undefined) {
       const res = this.editor?.setRowSide(rowIdOrSide as string, side) ?? false;
       this.cdr.markForCheck();
@@ -878,59 +900,84 @@ export class SeatsEditorComponent
     return res;
   }
 
-  public setRowTableWidth(rowIdOrWidth: string | number, tableWidth?: number): boolean {
+  public setRowTableWidth(
+    rowIdOrWidth: string | number,
+    tableWidth?: number
+  ): boolean {
     if (typeof rowIdOrWidth === 'string' && tableWidth !== undefined) {
-      const res = this.editor?.setRowTableWidth(rowIdOrWidth, tableWidth) ?? false;
+      const res =
+        this.editor?.setRowTableWidth(rowIdOrWidth, tableWidth) ?? false;
       this.cdr.markForCheck();
       return res;
     }
     if (!this.selectedRow) return false;
-    const val = typeof rowIdOrWidth === 'number' ? rowIdOrWidth : tableWidth ?? 0;
+    const val =
+      typeof rowIdOrWidth === 'number' ? rowIdOrWidth : (tableWidth ?? 0);
     const res =
-      this.editor?.setRowTableWidth(this.selectedRow.row.id, Math.max(0, val)) ??
-      false;
+      this.editor?.setRowTableWidth(
+        this.selectedRow.row.id,
+        Math.max(0, val)
+      ) ?? false;
     this.cdr.markForCheck();
     return res;
   }
 
-  public setRowSeatSpacing(rowIdOrSpacing: string | number, seatSpacing?: number): boolean {
+  public setRowSeatSpacing(
+    rowIdOrSpacing: string | number,
+    seatSpacing?: number
+  ): boolean {
     if (typeof rowIdOrSpacing === 'string' && seatSpacing !== undefined) {
-      const res = this.editor?.setRowSeatSpacing(rowIdOrSpacing, seatSpacing) ?? false;
+      const res =
+        this.editor?.setRowSeatSpacing(rowIdOrSpacing, seatSpacing) ?? false;
       this.cdr.markForCheck();
       return res;
     }
     if (!this.selectedRow) return false;
-    const val = typeof rowIdOrSpacing === 'number' ? rowIdOrSpacing : seatSpacing ?? 40;
+    const val =
+      typeof rowIdOrSpacing === 'number' ? rowIdOrSpacing : (seatSpacing ?? 40);
     const res =
-      this.editor?.setRowSeatSpacing(this.selectedRow.row.id, Math.max(28, val)) ??
-      false;
+      this.editor?.setRowSeatSpacing(
+        this.selectedRow.row.id,
+        Math.max(28, val)
+      ) ?? false;
     this.cdr.markForCheck();
     return res;
   }
 
-  public setRowSeatRadius(rowIdOrRadius: string | number, seatRadius?: number): boolean {
+  public setRowSeatRadius(
+    rowIdOrRadius: string | number,
+    seatRadius?: number
+  ): boolean {
     if (typeof rowIdOrRadius === 'string' && seatRadius !== undefined) {
-      const res = this.editor?.setRowSeatRadius(rowIdOrRadius, seatRadius) ?? false;
+      const res =
+        this.editor?.setRowSeatRadius(rowIdOrRadius, seatRadius) ?? false;
       this.cdr.markForCheck();
       return res;
     }
     if (!this.selectedRow) return false;
-    const val = typeof rowIdOrRadius === 'number' ? rowIdOrRadius : seatRadius ?? 14;
+    const val =
+      typeof rowIdOrRadius === 'number' ? rowIdOrRadius : (seatRadius ?? 14);
     const res =
-      this.editor?.setRowSeatRadius(this.selectedRow.row.id, Math.max(8, val)) ??
-      false;
+      this.editor?.setRowSeatRadius(
+        this.selectedRow.row.id,
+        Math.max(8, val)
+      ) ?? false;
     this.cdr.markForCheck();
     return res;
   }
 
-  public setRowSeatCount(rowIdOrCount: string | number, count?: number): boolean {
+  public setRowSeatCount(
+    rowIdOrCount: string | number,
+    count?: number
+  ): boolean {
     if (typeof rowIdOrCount === 'string' && count !== undefined) {
       const res = this.editor?.setRowSeatCount(rowIdOrCount, count) ?? false;
       this.cdr.markForCheck();
       return res;
     }
     if (!this.selectedRow) return false;
-    const targetCount = typeof rowIdOrCount === 'number' ? rowIdOrCount : count ?? 1;
+    const targetCount =
+      typeof rowIdOrCount === 'number' ? rowIdOrCount : (count ?? 1);
     const res =
       this.editor?.setRowSeatCount(
         this.selectedRow.row.id,
@@ -949,7 +996,9 @@ export class SeatsEditorComponent
   public decrementSeatCount(): void {
     if (!this.selectedRow) return;
     const delta = this.selectedRow.row.side === 'both' ? 2 : 1;
-    this.setRowSeatCount(Math.max(1, this.selectedRow.row.seats.length - delta));
+    this.setRowSeatCount(
+      Math.max(1, this.selectedRow.row.seats.length - delta)
+    );
   }
 
   // -------------------------------------------------------------
@@ -1056,8 +1105,7 @@ export class SeatsEditorComponent
   }
 
   public deleteVertex(polygonNodeId: string, vertexIndex: number): boolean {
-    const res =
-      this.editor?.deleteVertex(polygonNodeId, vertexIndex) ?? false;
+    const res = this.editor?.deleteVertex(polygonNodeId, vertexIndex) ?? false;
     this.cdr.markForCheck();
     return res;
   }

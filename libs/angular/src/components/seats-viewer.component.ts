@@ -3,7 +3,8 @@ import type {
   ElementRef,
   OnChanges,
   OnDestroy,
-  SimpleChanges} from '@angular/core';
+  SimpleChanges,
+} from '@angular/core';
 import {
   Component,
   EventEmitter,

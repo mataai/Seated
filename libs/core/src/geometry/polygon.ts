@@ -1,10 +1,5 @@
 import type { Vec2 } from '../schema/types';
-import {
-  cross,
-  sub,
-  distanceToSegmentSq,
-  approxEqual,
-} from './vec2';
+import { cross, sub, distanceToSegmentSq, approxEqual } from './vec2';
 
 /**
  * Calculates the signed area of a polygon using the shoelace formula.
@@ -104,11 +99,7 @@ export function isPointOnPolygonBoundary(
  * Standard ray-casting test.
  * Returns true if point is inside the polygon or on its boundary (within tol).
  */
-export function pointInPolygon(
-  p: Vec2,
-  polygon: Vec2[],
-  tol = 0.01
-): boolean {
+export function pointInPolygon(p: Vec2, polygon: Vec2[], tol = 0.01): boolean {
   const n = polygon.length;
   if (n < 3) return false;
 
@@ -125,8 +116,7 @@ export function pointInPolygon(
     const yj = polygon[j].y;
 
     const intersect =
-      yi > p.y !== yj > p.y &&
-      p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi;
+      yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi;
     if (intersect) inside = !inside;
   }
 
@@ -156,8 +146,7 @@ export function pointStrictlyInPolygon(
     const yj = polygon[j].y;
 
     const intersect =
-      yi > p.y !== yj > p.y &&
-      p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi;
+      yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi;
     if (intersect) inside = !inside;
   }
 
@@ -454,4 +443,3 @@ export function flipPolygon(
   });
   return normalizeWinding(mirrored, 'ccw');
 }
-

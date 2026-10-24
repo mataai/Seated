@@ -101,12 +101,7 @@ export default [
     },
   },
   {
-    files: [
-      '**/*.spec.ts',
-      '**/*.test.ts',
-      '**/tests/**',
-      '**/test-setup.ts',
-    ],
+    files: ['**/*.spec.ts', '**/*.test.ts', '**/tests/**', '**/test-setup.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',

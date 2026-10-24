@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   main:
-    name: Lint, Typecheck, Test & Build
+    name: Format, Lint, Typecheck, Test & Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -37,6 +37,9 @@ jobs:
 
       - name: Derive base and head SHAs for affected
         uses: nrwl/nx-set-shas@v4
+
+      - name: Check formatting
+        run: npx nx format:check
 
       - name: Lint, typecheck, test and build affected projects
         run: npx nx affected -t lint typecheck test build

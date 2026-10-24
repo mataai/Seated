@@ -1,5 +1,5 @@
 import './test-setup';
-import type { ComponentFixture} from '@angular/core/testing';
+import type { ComponentFixture } from '@angular/core/testing';
 import { TestBed } from '@angular/core/testing';
 import { SeatsViewerComponent } from '../src/components/seats-viewer.component';
 import { SAMPLE_FLOORPLAN } from '@open-seats/core';
@@ -26,7 +26,9 @@ describe('SeatsViewerComponent', () => {
     fixture.detectChanges();
 
     expect(component).toBeTruthy();
-    expect(component.containerRef.nativeElement.querySelector('.konvajs-content')).toBeTruthy();
+    expect(
+      component.containerRef.nativeElement.querySelector('.konvajs-content')
+    ).toBeTruthy();
   });
 
   it('selects, deselects and clears seat selection', () => {

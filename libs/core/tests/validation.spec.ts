@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  canPlace,
-  validateLayout,
-  type Floorplan,
-} from '../src';
+import { canPlace, validateLayout, type Floorplan } from '../src';
 
 describe('Layout and Incremental Validation', () => {
   const createBasePlan = (): Floorplan => ({
@@ -133,7 +129,9 @@ describe('Layout and Incremental Validation', () => {
     const collisionCheck = canPlace(plan, 'r-1', {
       position: { x: 20, y: 20 },
     });
-    expect(collisionCheck.some((v) => v.rule === 'zone-row-overlap')).toBe(true);
+    expect(collisionCheck.some((v) => v.rule === 'zone-row-overlap')).toBe(
+      true
+    );
 
     // Invalid: move out of building bounds
     const oobCheck = canPlace(plan, 'r-1', {

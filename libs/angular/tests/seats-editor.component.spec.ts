@@ -1,5 +1,5 @@
 import './test-setup';
-import type { ComponentFixture} from '@angular/core/testing';
+import type { ComponentFixture } from '@angular/core/testing';
 import { TestBed } from '@angular/core/testing';
 import { SeatsEditorComponent } from '../src/components/seats-editor.component';
 import { SAMPLE_FLOORPLAN } from '@open-seats/core';
@@ -27,7 +27,11 @@ describe('SeatsEditorComponent', () => {
     fixture.detectChanges();
 
     expect(component).toBeTruthy();
-    expect(component.containerRef.nativeElement.querySelector('.open-seats-editor-canvas')).toBeTruthy();
+    expect(
+      component.containerRef.nativeElement.querySelector(
+        '.open-seats-editor-canvas'
+      )
+    ).toBeTruthy();
   });
 
   it('switches tools and emits toolChange', () => {

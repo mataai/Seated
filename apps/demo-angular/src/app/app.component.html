@@ -28,14 +28,16 @@
 
     <div class="header-actions">
       <button class="btn" (click)="resetZoom()">Reset View</button>
-      <button class="btn btn-primary" (click)="exportJson()">Export JSON</button>
+      <button class="btn btn-primary" (click)="exportJson()">
+        Export JSON
+      </button>
     </div>
   </header>
 
   <!-- 1. EDITOR MODE: Complete visual editor with tools & properties panels built-in -->
   @if (mode === 'editor') {
     <seats-editor
-      style="flex: 1; width: 100%; height: calc(100vh - 56px); min-width: 0;"
+      style="flex: 1; width: 100%; height: calc(100vh - 56px); min-width: 0"
       [floorplan]="floorplan"
       (change)="onFloorplanChanged($event)"
       (selectionChange)="onEditorSelectionChanged($event)"
@@ -61,9 +63,15 @@
 
         <!-- Floating Zoom & Pan Controls for Viewer -->
         <div class="floating-controls">
-          <button class="floating-btn" (click)="zoomIn()" title="Zoom In">+</button>
-          <button class="floating-btn" (click)="zoomOut()" title="Zoom Out">-</button>
-          <button class="floating-btn" (click)="resetZoom()" title="Reset Zoom">⤾</button>
+          <button class="floating-btn" (click)="zoomIn()" title="Zoom In">
+            +
+          </button>
+          <button class="floating-btn" (click)="zoomOut()" title="Zoom Out">
+            -
+          </button>
+          <button class="floating-btn" (click)="resetZoom()" title="Reset Zoom">
+            ⤾
+          </button>
         </div>
       </main>
 
@@ -121,11 +129,15 @@
                   </span>
                 }
               </div>
-              <div class="btn-group" style="margin-top: 12px;">
-                <button class="btn btn-primary" style="flex: 1;" (click)="reserveSelected()">
+              <div class="btn-group" style="margin-top: 12px">
+                <button
+                  class="btn btn-primary"
+                  style="flex: 1"
+                  (click)="reserveSelected()"
+                >
                   Reserve
                 </button>
-                <button class="btn" style="flex: 1;" (click)="clearSelection()">
+                <button class="btn" style="flex: 1" (click)="clearSelection()">
                   Clear
                 </button>
               </div>
@@ -138,7 +150,8 @@
               @for (event of eventLog; track event.id) {
                 <div class="event-row">
                   <span class="event-time">[{{ event.time }}]</span>
-                  <span class="event-name">{{ event.name }}</span>:
+                  <span class="event-name">{{ event.name }}</span
+                  >:
                   <span class="event-detail">{{ event.detail }}</span>
                 </div>
               }

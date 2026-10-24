@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  FALLBACK_STATUS_STYLE,
-  StatusRegistry,
-} from '../src';
+import { FALLBACK_STATUS_STYLE, StatusRegistry } from '../src';
 
 describe('StatusRegistry', () => {
   it('initializes with DEFAULT_STATUSES', () => {

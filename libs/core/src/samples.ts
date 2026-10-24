@@ -69,7 +69,12 @@ export const SAMPLE_FLOORPLAN: Floorplan = {
           seatSpacing: 42,
           seatRadius: 13,
           tableWidth: 26,
-          tableStyle: { fill: '#1e1b4b', stroke: '#4338ca', strokeWidth: 1.5, cornerRadius: 6 },
+          tableStyle: {
+            fill: '#1e1b4b',
+            stroke: '#4338ca',
+            strokeWidth: 1.5,
+            cornerRadius: 6,
+          },
           seats: [
             { id: 's-a-1a', index: 0, side: 'a', label: 'A-1a' },
             { id: 's-a-1b', index: 0, side: 'b', label: 'A-1b' },
@@ -103,7 +108,12 @@ export const SAMPLE_FLOORPLAN: Floorplan = {
           seatSpacing: 42,
           seatRadius: 13,
           tableWidth: 26,
-          tableStyle: { fill: '#1e293b', stroke: '#334155', strokeWidth: 1.5, cornerRadius: 6 },
+          tableStyle: {
+            fill: '#1e293b',
+            stroke: '#334155',
+            strokeWidth: 1.5,
+            cornerRadius: 6,
+          },
           seats: [
             { id: 's-b-1a', index: 0, side: 'a', label: 'B-1a' },
             { id: 's-b-1b', index: 0, side: 'b', label: 'B-1b' },
@@ -137,7 +147,12 @@ export const SAMPLE_FLOORPLAN: Floorplan = {
           seatSpacing: 42,
           seatRadius: 13,
           tableWidth: 26,
-          tableStyle: { fill: '#1e293b', stroke: '#334155', strokeWidth: 1.5, cornerRadius: 6 },
+          tableStyle: {
+            fill: '#1e293b',
+            stroke: '#334155',
+            strokeWidth: 1.5,
+            cornerRadius: 6,
+          },
           seats: [
             { id: 's-c-1a', index: 0, side: 'a', label: 'C-1a' },
             { id: 's-c-1b', index: 0, side: 'b', label: 'C-1b' },
@@ -171,7 +186,12 @@ export const SAMPLE_FLOORPLAN: Floorplan = {
           seatSpacing: 42,
           seatRadius: 13,
           tableWidth: 26,
-          tableStyle: { fill: '#1e293b', stroke: '#334155', strokeWidth: 1.5, cornerRadius: 6 },
+          tableStyle: {
+            fill: '#1e293b',
+            stroke: '#334155',
+            strokeWidth: 1.5,
+            cornerRadius: 6,
+          },
           seats: [
             { id: 's-d-1a', index: 0, side: 'a', label: 'D-1a' },
             { id: 's-d-1b', index: 0, side: 'b', label: 'D-1b' },
@@ -241,7 +261,12 @@ export const SAMPLE_FLOORPLAN: Floorplan = {
           seatSpacing: 45,
           seatRadius: 14,
           tableWidth: 32,
-          tableStyle: { fill: '#78350f', stroke: '#d97706', strokeWidth: 1.5, cornerRadius: 8 },
+          tableStyle: {
+            fill: '#78350f',
+            stroke: '#d97706',
+            strokeWidth: 1.5,
+            cornerRadius: 8,
+          },
           seats: [
             { id: 's-v1-1a', index: 0, side: 'a', label: 'V1-1a' },
             { id: 's-v1-1b', index: 0, side: 'b', label: 'V1-1b' },
@@ -262,7 +287,12 @@ export const SAMPLE_FLOORPLAN: Floorplan = {
           seatSpacing: 45,
           seatRadius: 14,
           tableWidth: 32,
-          tableStyle: { fill: '#78350f', stroke: '#d97706', strokeWidth: 1.5, cornerRadius: 8 },
+          tableStyle: {
+            fill: '#78350f',
+            stroke: '#d97706',
+            strokeWidth: 1.5,
+            cornerRadius: 8,
+          },
           seats: [
             { id: 's-v2-1a', index: 0, side: 'a', label: 'V2-1a' },
             { id: 's-v2-1b', index: 0, side: 'b', label: 'V2-1b' },
