@@ -1,6 +1,28 @@
 {
   "name": "@open-seats/editor",
   "version": "0.0.1",
+  "description": "Visual floorplan editor for buildings, zones, tables, rows and seats.",
+  "license": "GPL-3.0-or-later",
+  "keywords": [
+    "seating-chart",
+    "seat-map",
+    "floorplan",
+    "reservation",
+    "canvas",
+    "typescript"
+  ],
+  "homepage": "https://github.com/mataai/Seated#readme",
+  "bugs": {
+    "url": "https://github.com/mataai/Seated/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mataai/Seated.git",
+    "directory": "libs/editor"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./index.js",
   "types": "./index.d.ts",

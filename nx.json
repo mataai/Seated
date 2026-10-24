@@ -42,6 +42,11 @@
     "@nx/vitest:test": {
       "cache": true,
       "inputs": ["default", "^production"]
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
     }
   },
   "plugins": [
@@ -83,8 +88,25 @@
     }
   },
   "release": {
+    "projects": ["tag:layer:*"],
+    "projectsRelationship": "fixed",
+    "releaseTag": {
+      "pattern": "v{version}"
+    },
     "version": {
-      "preVersionCommand": "npx nx run-many -t build"
+      "currentVersionResolver": "disk"
+    },
+    "changelog": {
+      "workspaceChangelog": {
+        "file": "CHANGELOG.md",
+        "createRelease": false
+      },
+      "projectChangelogs": false
+    },
+    "git": {
+      "commit": true,
+      "tag": true,
+      "commitMessage": "chore(release): publish v{version}"
     }
   },
   "defaultProject": "ng-demo",

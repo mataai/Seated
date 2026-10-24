@@ -10,7 +10,10 @@ export default defineConfig(() => ({
   cacheDir: '../../node_modules/.vite/libs/core',
   plugins: [
     nxViteTsPaths(),
-    nxCopyAssetsPlugin(['*.md']),
+    nxCopyAssetsPlugin([
+      '*.md',
+      { input: '../..', glob: 'LICENSE', output: '.' },
+    ]),
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),

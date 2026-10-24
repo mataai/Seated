@@ -3,5 +3,13 @@
   "dest": "../../dist/libs/angular",
   "lib": {
     "entryFile": "src/index.ts"
-  }
+  },
+  "assets": [
+    {
+      "input": ".",
+      "glob": "LICENSE",
+      "output": ".",
+      "followSymlinks": true
+    }
+  ]
 }

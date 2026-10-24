@@ -389,6 +389,12 @@ npx nx run-many -t lint
 
 ---
 
+### Releasing
+
+Packages are published to npm from CI when a version tag is pushed. See [RELEASING.md](RELEASING.md).
+
+---
+
 ## License
 
 This project is licensed under the [GNU General Public License v3.0 (GPLv3)](LICENSE).

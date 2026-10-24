@@ -1,0 +1,59 @@
+name: Release - Publish to npm
+
+# Publishes every @open-seats/* package when a version tag is pushed.
+# Tags are created locally by `npx nx release` (see RELEASING.md).
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # Required for npm trusted publishing (OIDC) and provenance
+  id-token: write
+
+jobs:
+  publish:
+    name: Build, Test & Publish
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/org/open-seats
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm >= 11.5.1; Node 22 ships with npm 10
+      - name: Upgrade npm
+        run: npm install -g npm@^11.5.1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check tag matches package versions
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for manifest in libs/*/package.json; do
+            version=$(node -p "require('./$manifest').version")
+            if [ "$version" != "$tag" ]; then
+              echo "::error file=$manifest::version $version does not match tag v$tag"
+              exit 1
+            fi
+          done
+
+      - name: Lint, typecheck, test and build packages
+        run: npx nx run-many -t lint typecheck test build --projects='tag:layer:*'
+
+      - name: Publish to npm
+        run: npx nx release publish
