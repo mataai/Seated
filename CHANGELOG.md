@@ -1,5 +1,9 @@
 ## 0.1.1 (2026-10-27)
 
+This was a version bump only, there were no code changes.
+
+## 0.1.0 (2026-10-27)
+
 ### ✨ New Features
 
 - **Table Creation**: Tables can now be created by clicking two endpoints on the canvas. The table will automatically be placed inside a building and its length will be preserved exactly.

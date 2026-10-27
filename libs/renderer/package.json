@@ -1,6 +1,6 @@
 {
   "name": "@open-seats/renderer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Konva-based canvas renderer for OpenSeats floorplans.",
   "license": "GPL-3.0-or-later",
   "keywords": [
@@ -36,7 +36,7 @@
   },
   "sideEffects": false,
   "dependencies": {
-    "@open-seats/core": "0.1.0",
+    "@open-seats/core": "0.1.1",
     "konva": "^9.3.20"
   }
 }
