@@ -89,6 +89,17 @@ export interface Renderer {
     currentCorner: Vec2,
     isInvalid?: boolean
   ): void;
+  renderDraftRow?(
+    end1: Vec2,
+    end2: Vec2,
+    options?: {
+      seatSpacing?: number;
+      seatRadius?: number;
+      tableWidth?: number;
+      side?: 'one' | 'both';
+    },
+    isInvalid?: boolean
+  ): void;
   clearDraftPolygon(): void;
   getPointerWorldPosition(): Vec2 | null;
   zoomIn(factor?: number): void;

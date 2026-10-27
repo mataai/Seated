@@ -505,7 +505,8 @@ export class KonvaRenderer implements Renderer {
 
     // Row Table Body / Bounding Rect
     const hasTable = row.tableWidth > 0;
-    const bodyWidth = maxIndex * row.seatSpacing + 2 * row.seatRadius;
+    const naturalWidth = maxIndex * row.seatSpacing + 2 * row.seatRadius;
+    const bodyWidth = Math.max(naturalWidth, row.tableLength ?? naturalWidth);
     const bodyHeight = hasTable ? row.tableWidth : row.seatRadius * 2 + 10;
     const yOffset = hasTable ? -row.tableWidth / 2 : -bodyHeight / 2;
 
@@ -1079,6 +1080,178 @@ export class KonvaRenderer implements Renderer {
         fill: isInvalid ? '#f87171' : '#38bdf8',
         listening: false,
       });
+      this.overlayLayer.add(text);
+    }
+
+    this.overlayLayer.batchDraw();
+  }
+
+  public renderDraftRow(
+    end1: Vec2,
+    end2: Vec2,
+    options?: {
+      seatSpacing?: number;
+      seatRadius?: number;
+      tableWidth?: number;
+      side?: 'one' | 'both';
+    },
+    isInvalid = false
+  ): void {
+    this.overlayLayer.destroyChildren();
+
+    const scale = this.stage.scaleX() || 1;
+    const dx = end2.x - end1.x;
+    const dy = end2.y - end1.y;
+    const length = Math.hypot(dx, dy);
+
+    if (length < 2) {
+      // Just render the start point marker
+      const startMarker = new Konva.Circle({
+        x: end1.x,
+        y: end1.y,
+        radius: 6 / scale,
+        fill: '#10b981',
+        stroke: '#ffffff',
+        strokeWidth: 2 / scale,
+        shadowColor: '#000000',
+        shadowBlur: 3,
+        shadowOpacity: 0.25,
+        listening: false,
+      });
+      this.overlayLayer.add(startMarker);
+      this.overlayLayer.batchDraw();
+      return;
+    }
+
+    const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+    const seatSpacing = options?.seatSpacing ?? 40;
+    const seatRadius = options?.seatRadius ?? 14;
+    const tableWidth = options?.tableWidth ?? 28;
+    const side = options?.side ?? 'both';
+
+    // Group for rotated draft row elements
+    const draftGroup = new Konva.Group({
+      x: end1.x,
+      y: end1.y,
+      rotation: angleDeg,
+      listening: false,
+    });
+
+    const fillColor = isInvalid
+      ? 'rgba(239, 68, 68, 0.2)'
+      : 'rgba(99, 102, 241, 0.15)';
+    const strokeColor = isInvalid ? '#ef4444' : '#6366f1';
+
+    // 1. Table rectangle
+    const hasTable = tableWidth > 0;
+    const bodyHeight = hasTable ? tableWidth : seatRadius * 2 + 10;
+    const yOffset = hasTable ? -tableWidth / 2 : -bodyHeight / 2;
+
+    const tableRect = new Konva.Rect({
+      x: 0,
+      y: yOffset,
+      width: length,
+      height: bodyHeight,
+      fill: fillColor,
+      stroke: strokeColor,
+      strokeWidth: 2 / scale,
+      dash: isInvalid ? [4 / scale, 4 / scale] : [6 / scale, 4 / scale],
+      cornerRadius: 4 / scale,
+      listening: false,
+    });
+    draftGroup.add(tableRect);
+
+    // Centerline guide
+    const centerLine = new Konva.Line({
+      points: [0, 0, length, 0],
+      stroke: isInvalid ? 'rgba(239, 68, 68, 0.5)' : 'rgba(99, 102, 241, 0.4)',
+      strokeWidth: 1 / scale,
+      dash: [4 / scale, 4 / scale],
+      listening: false,
+    });
+    draftGroup.add(centerLine);
+
+    // Calculate slots & dynamic seat positions based on length
+    const availLength = Math.max(0, length - 2 * seatRadius);
+    const slots = Math.max(1, Math.round(availLength / seatSpacing) + 1);
+    const effectiveSpacing =
+      slots > 1 ? availLength / (slots - 1) : seatSpacing;
+
+    const seatYOffset = tableWidth / 2 + seatRadius;
+    const seatSides: number[] =
+      side === 'both' ? [-seatYOffset, seatYOffset] : [-seatYOffset];
+
+    for (let i = 0; i < slots; i++) {
+      const seatX = seatRadius + i * effectiveSpacing;
+      if (seatX > length) break;
+      for (const sy of seatSides) {
+        const seatCircle = new Konva.Circle({
+          x: seatX,
+          y: sy,
+          radius: seatRadius,
+          fill: isInvalid
+            ? 'rgba(239, 68, 68, 0.3)'
+            : 'rgba(99, 102, 241, 0.25)',
+          stroke: isInvalid ? '#ef4444' : '#818cf8',
+          strokeWidth: 1.5 / scale,
+          listening: false,
+        });
+        draftGroup.add(seatCircle);
+      }
+    }
+
+    this.overlayLayer.add(draftGroup);
+
+    // Endpoint dots in world coordinates
+    const startDot = new Konva.Circle({
+      x: end1.x,
+      y: end1.y,
+      radius: 6 / scale,
+      fill: '#10b981',
+      stroke: '#ffffff',
+      strokeWidth: 2 / scale,
+      shadowColor: '#000000',
+      shadowBlur: 3,
+      shadowOpacity: 0.25,
+      listening: false,
+    });
+    this.overlayLayer.add(startDot);
+
+    const endDot = new Konva.Circle({
+      x: end2.x,
+      y: end2.y,
+      radius: 5 / scale,
+      fill: isInvalid ? '#ef4444' : '#ffffff',
+      stroke: isInvalid ? '#ffffff' : '#4f46e5',
+      strokeWidth: 2 / scale,
+      shadowColor: '#000000',
+      shadowBlur: 3,
+      shadowOpacity: 0.25,
+      listening: false,
+    });
+    this.overlayLayer.add(endDot);
+
+    // Live dimensions & seats count badge
+    if (length > 20) {
+      const totalSeats = slots * (side === 'both' ? 2 : 1);
+      const textVal = isInvalid
+        ? `${Math.round(length)}px • ${totalSeats} seats (outside building)`
+        : `${Math.round(length)}px • ${totalSeats} seats`;
+      const badgePos = {
+        x: (end1.x + end2.x) / 2,
+        y: (end1.y + end2.y) / 2 - 20 / scale,
+      };
+      const text = new Konva.Text({
+        x: badgePos.x,
+        y: badgePos.y,
+        text: textVal,
+        fontSize: 11 / scale,
+        fontFamily: 'sans-serif',
+        fontStyle: 'bold',
+        fill: isInvalid ? '#f87171' : '#38bdf8',
+        listening: false,
+      });
+      text.offsetX(text.width() / 2);
       this.overlayLayer.add(text);
     }
 

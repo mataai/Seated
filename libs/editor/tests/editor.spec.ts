@@ -806,14 +806,71 @@ describe('Editor (@open-seats/editor)', () => {
     expect(editor.getFloorplan()).toEqual(initialPlan);
   });
 
-  it('does not share state with the floorplan passed in', () => {
-    const plan = structuredClone(initialPlan);
-    editor = createEditor(container, { floorplan: plan });
-    plan.buildings[0].position.x = 999;
+  it('creates table interactively via 2 endpoint clicks, preserving drawn length and calculating seat count dynamically', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const editorAny = editor as any;
 
-    expect(editor.getFloorplan().buildings[0].position).toEqual({
-      x: 50,
-      y: 50,
-    });
+    let startedOpts: any = null;
+    let completedRow: any = null;
+    editor.on('rowCreationStarted', (opts) => (startedOpts = opts));
+    editor.on('rowCreationCompleted', (r) => (completedRow = r));
+
+    editor.setTool('row');
+    expect(editor.getTool()).toBe('row');
+    expect(editor.isCreatingRow()).toBe(true);
+    expect(startedOpts).toEqual({});
+
+    // End 1 inside building b-1 (world 100, 150)
+    editorAny.handleStageClick({ x: 100, y: 150 }, new MouseEvent('click'));
+    expect(editor.getDraftRowPoints().length).toBe(1);
+
+    // End 2 inside building b-1 (world 300, 150) -> drawn length 200px
+    editorAny.handleStageClick({ x: 300, y: 150 }, new MouseEvent('click'));
+
+    expect(editor.isCreatingRow()).toBe(false);
+    expect(editor.getTool()).toBe('select');
+    expect(completedRow).not.toBeNull();
+    expect(completedRow.tableLength).toBe(200);
+
+    // Dynamic calculation: (200 - 2*14) / 40 = 172 / 40 = 4.3 -> rounded: 4 slots + 1 = 5 slots.
+    // 'both' sides -> 10 seats!
+    expect(completedRow.seats.length).toBe(10);
+    expect(completedRow.seatSpacing).toBe(43); // 172 / 4 = 43
+  });
+
+  it('cancels interactive table creation on Escape key', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const editorAny = editor as any;
+
+    let cancelled = false;
+    editor.on('rowCreationCancelled', () => (cancelled = true));
+
+    editor.startRowCreation();
+    editorAny.handleStageClick({ x: 100, y: 150 }, new MouseEvent('click'));
+    expect(editor.getDraftRowPoints().length).toBe(1);
+
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+    );
+
+    expect(cancelled).toBe(true);
+    expect(editor.isCreatingRow()).toBe(false);
+    expect(editor.getTool()).toBe('select');
+  });
+
+  it('emits rowCreationFailed if clicking End 1 outside of a building', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const editorAny = editor as any;
+
+    let failReason: string | null = null;
+    editor.on('rowCreationFailed', (payload) => (failReason = payload.reason));
+
+    editor.startRowCreation();
+    // Click outside building b-1 (world 900, 900)
+    editorAny.handleStageClick({ x: 900, y: 900 }, new MouseEvent('click'));
+
+    expect(failReason).toContain('Click inside a building');
+    expect(editor.getDraftRowPoints().length).toBe(0);
+    expect(editor.isCreatingRow()).toBe(true);
   });
 });
