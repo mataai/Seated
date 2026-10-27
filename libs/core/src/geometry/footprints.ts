@@ -51,7 +51,12 @@ export function rowFootprint(row: Row, parentBuilding?: Building): Vec2[] {
   }
 
   const minX = -row.seatRadius;
-  const maxX = maxIndex * row.seatSpacing + row.seatRadius;
+  const naturalWidth = maxIndex * row.seatSpacing + row.seatRadius;
+  const tableLengthWidth =
+    row.tableLength !== undefined
+      ? -row.seatRadius + row.tableLength
+      : naturalWidth;
+  const maxX = Math.max(naturalWidth, tableLengthWidth);
   const halfTable = row.tableWidth / 2;
   const twoRadius = 2 * row.seatRadius;
 

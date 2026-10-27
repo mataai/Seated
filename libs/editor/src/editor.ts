@@ -1,7 +1,9 @@
 import {
   buildingFootprint,
   canPlace,
+  inverseTransformPoint,
   parseFloorplan,
+  pointInPolygon,
   polygonsOverlap,
   TypedEventEmitter,
   validateLayout,
@@ -29,6 +31,7 @@ import type {
   EditorOptions,
   EditorRulesConfig,
   GridSnappingConfig,
+  RowCreationOptions,
   ToolType,
 } from './types';
 
@@ -55,6 +58,11 @@ export class Editor implements EditorInstance {
   private buildingCreationMode: BuildingCreationMode = 'outline';
   private draftBuildingPoints: Vec2[] = [];
   private draftBuildingLabel?: string;
+
+  private isDrawingRow = false;
+  private draftRowPoints: Vec2[] = [];
+  private draftRowOpts?: RowCreationOptions;
+  private draftRowBuildingId?: string;
 
   private rules: EditorRulesConfig;
   private grid: GridSnappingConfig;
@@ -218,6 +226,10 @@ export class Editor implements EditorInstance {
         this.cancelBuildingCreation();
         return;
       }
+      if (this.isDrawingRow || this.activeTool === 'row') {
+        this.cancelRowCreation();
+        return;
+      }
       this.clearSelection();
       return;
     }
@@ -322,6 +334,9 @@ export class Editor implements EditorInstance {
     if (this.isDrawingBuilding) {
       this.cancelBuildingCreation();
     }
+    if (this.isDrawingRow) {
+      this.cancelRowCreation();
+    }
     this.floorplan = parsed;
     this.commandStack.clear();
     this.selectedNodeIds = [];
@@ -334,11 +349,24 @@ export class Editor implements EditorInstance {
 
   public setTool(tool: ToolType): void {
     if (tool === 'building') {
+      if (this.isDrawingRow) {
+        this.cancelRowCreation();
+      }
       this.startBuildingCreation();
+      return;
+    }
+    if (tool === 'row') {
+      if (this.isDrawingBuilding) {
+        this.cancelBuildingCreation();
+      }
+      this.startRowCreation();
       return;
     }
     if (this.isDrawingBuilding) {
       this.cancelBuildingCreation();
+    }
+    if (this.isDrawingRow) {
+      this.cancelRowCreation();
     }
     this.activeTool = tool;
     this.renderer?.setDraggableNodes(tool === 'select');
@@ -438,10 +466,183 @@ export class Editor implements EditorInstance {
     return [...this.draftBuildingPoints];
   }
 
+  public startRowCreation(
+    options?: RowCreationOptions,
+    buildingId?: string
+  ): void {
+    this.isDrawingRow = true;
+    this.draftRowPoints = [];
+    this.draftRowOpts = options;
+    this.draftRowBuildingId = buildingId;
+    this.activeTool = 'row';
+    this.clearSelection();
+    this.renderer?.setDraggableNodes(false);
+    this.renderer?.setStageDraggable(false);
+    this.renderer?.setCursor('crosshair');
+    this.renderer?.clearDraftPolygon();
+    this.emitter.emit('toolChange', 'row');
+    this.emitter.emit('rowCreationStarted', options ?? {});
+  }
+
+  public cancelRowCreation(): void {
+    const wasDrawing = this.isDrawingRow || this.activeTool === 'row';
+    this.isDrawingRow = false;
+    this.draftRowPoints = [];
+    this.draftRowOpts = undefined;
+    this.draftRowBuildingId = undefined;
+    this.renderer?.clearDraftPolygon();
+    this.renderer?.setStageDraggable(true);
+    this.renderer?.setCursor('default');
+    this.activeTool = 'select';
+    this.renderer?.setDraggableNodes(true);
+    this.emitter.emit('toolChange', 'select');
+    if (wasDrawing) {
+      this.emitter.emit('rowCreationCancelled', undefined);
+    }
+  }
+
+  public isCreatingRow(): boolean {
+    return this.isDrawingRow;
+  }
+
+  public getDraftRowPoints(): Vec2[] {
+    return [...this.draftRowPoints];
+  }
+
   private handleStageClick(
     worldPos: Vec2,
     _evt: MouseEvent | TouchEvent
   ): void {
+    if (this.isDrawingRow) {
+      const snappedPos = this.snap(worldPos);
+
+      // End 1: First click
+      if (this.draftRowPoints.length === 0) {
+        const targetBuilding = this.draftRowBuildingId
+          ? this.floorplan.buildings.find(
+              (b) => b.id === this.draftRowBuildingId
+            )
+          : this.floorplan.buildings.find((b) =>
+              pointInPolygon(snappedPos, buildingFootprint(b))
+            );
+
+        if (!targetBuilding) {
+          this.emitter.emit('rowCreationFailed', {
+            reason: 'Click inside a building to place the table.',
+          });
+          return;
+        }
+
+        this.draftRowPoints.push(snappedPos);
+        this.draftRowBuildingId = targetBuilding.id;
+        this.emitter.emit('rowCreationPointsChange', [...this.draftRowPoints]);
+        this.renderer?.renderDraftRow?.(
+          snappedPos,
+          snappedPos,
+          this.draftRowOpts
+        );
+        return;
+      }
+
+      // End 2: Second click
+      const end1 = this.draftRowPoints[0];
+      const end2 = snappedPos;
+      const dist = Math.hypot(end2.x - end1.x, end2.y - end1.y);
+
+      // Ignore if too short (e.g. accidental double-click in place)
+      if (dist < 20) {
+        return;
+      }
+
+      const building = this.draftRowBuildingId
+        ? this.floorplan.buildings.find((b) => b.id === this.draftRowBuildingId)
+        : this.floorplan.buildings.find((b) =>
+            pointInPolygon(end1, buildingFootprint(b))
+          );
+
+      if (!building) {
+        this.draftRowPoints = [];
+        this.renderer?.clearDraftPolygon();
+        this.emitter.emit('rowCreationPointsChange', []);
+        this.emitter.emit('rowCreationFailed', {
+          reason: 'Table must be placed inside a building.',
+        });
+        return;
+      }
+
+      // Compute local building coordinates
+      const local1 = inverseTransformPoint(
+        end1,
+        building.position,
+        building.rotation
+      );
+      const local2 = inverseTransformPoint(
+        end2,
+        building.position,
+        building.rotation
+      );
+
+      const ldx = local2.x - local1.x;
+      const ldy = local2.y - local1.y;
+      const localDist = Math.hypot(ldx, ldy);
+      const angleDeg = (Math.atan2(ldy, ldx) * 180) / Math.PI;
+
+      const opts = this.draftRowOpts;
+      const side = opts?.side ?? 'both';
+      const nominalSpacing = opts?.seatSpacing ?? 40;
+      const seatRadius = opts?.seatRadius ?? 14;
+      const tableWidth = opts?.tableWidth ?? 28;
+
+      // Dynamic calculation: keep exact user-drawn length localDist,
+      // and determine seat count & spacing by rounding (L - 2*r) / spacing
+      const availLength = Math.max(0, localDist - 2 * seatRadius);
+      const slots = Math.max(1, Math.round(availLength / nominalSpacing) + 1);
+      const seatCount = side === 'both' ? slots * 2 : slots;
+      const effectiveSpacing =
+        slots > 1 ? availLength / (slots - 1) : nominalSpacing;
+
+      // Position offset along table axis by seatRadius
+      const rad = (angleDeg * Math.PI) / 180;
+      const rowPos: Vec2 = {
+        x: Math.round((local1.x + Math.cos(rad) * seatRadius) * 100) / 100,
+        y: Math.round((local1.y + Math.sin(rad) * seatRadius) * 100) / 100,
+      };
+
+      const createdRow = this.createRow(building.id, rowPos, seatCount, {
+        side,
+        seatSpacing: Math.round(effectiveSpacing * 100) / 100,
+        seatRadius,
+        tableWidth,
+        tableLength: Math.round(localDist * 100) / 100,
+        rotation: Math.round(angleDeg * 10) / 10,
+      });
+
+      if (createdRow) {
+        this.isDrawingRow = false;
+        this.draftRowPoints = [];
+        this.draftRowOpts = undefined;
+        this.draftRowBuildingId = undefined;
+        this.renderer?.clearDraftPolygon();
+        this.renderer?.setStageDraggable(true);
+        this.renderer?.setCursor('default');
+        this.activeTool = 'select';
+        this.renderer?.setDraggableNodes(true);
+        this.emitter.emit('toolChange', 'select');
+        this.selectNodes([createdRow.id]);
+        this.emitter.emit('rowCreationCompleted', createdRow);
+      } else {
+        // Validation failed (exceeds bounds or overlaps)
+        this.draftRowPoints = [];
+        this.renderer?.clearDraftPolygon();
+        this.emitter.emit('rowCreationPointsChange', []);
+        this.emitter.emit('rowCreationFailed', {
+          reason:
+            'Cannot place table: exceeds building bounds or overlaps existing objects.',
+        });
+      }
+      return;
+    }
+
     if (!this.isDrawingBuilding) return;
 
     if (this.buildingCreationMode === 'rectangle') {
@@ -545,6 +746,34 @@ export class Editor implements EditorInstance {
   }
 
   private handleStageMouseMove(worldPos: Vec2, _evt: MouseEvent): void {
+    if (this.isDrawingRow && this.draftRowPoints.length === 1) {
+      const end1 = this.draftRowPoints[0];
+      const end2 = this.snap(worldPos);
+
+      let isInvalid = false;
+      if (this.rules.enforce) {
+        const building = this.draftRowBuildingId
+          ? this.floorplan.buildings.find(
+              (b) => b.id === this.draftRowBuildingId
+            )
+          : this.floorplan.buildings.find((b) =>
+              pointInPolygon(end1, buildingFootprint(b))
+            );
+
+        if (!building) {
+          isInvalid = true;
+        } else {
+          const bPoly = buildingFootprint(building);
+          if (!pointInPolygon(end2, bPoly)) {
+            isInvalid = true;
+          }
+        }
+      }
+
+      this.renderer?.renderDraftRow?.(end1, end2, this.draftRowOpts, isInvalid);
+      return;
+    }
+
     if (!this.isDrawingBuilding) return;
     if (this.draftBuildingPoints.length === 0) return;
 
@@ -907,6 +1136,7 @@ export class Editor implements EditorInstance {
       seatSpacing?: number;
       seatRadius?: number;
       tableWidth?: number;
+      tableLength?: number;
       rotation?: number;
     }
   ): Row | null {

@@ -40,6 +40,7 @@ export interface Row {
   seatSpacing: number;
   seatRadius: number;
   tableWidth: number;
+  tableLength?: number;
   tableStyle?: RowTableStyle;
   seats: Seat[];
   data?: Record<string, unknown>;

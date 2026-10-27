@@ -30,6 +30,13 @@ export interface EditorOptions {
 
 export type BuildingCreationMode = 'outline' | 'rectangle';
 
+export interface RowCreationOptions {
+  side?: 'one' | 'both';
+  seatSpacing?: number;
+  seatRadius?: number;
+  tableWidth?: number;
+}
+
 export interface EditorEvents {
   change: Floorplan;
   toolChange: ToolType;
@@ -41,6 +48,11 @@ export interface EditorEvents {
   buildingCreationCompleted: Building;
   buildingCreationCancelled: void;
   buildingCreationFailed: { reason: string; violations?: Violation[] };
+  rowCreationStarted: RowCreationOptions;
+  rowCreationPointsChange: Vec2[];
+  rowCreationCompleted: Row;
+  rowCreationCancelled: void;
+  rowCreationFailed: { reason: string; violations?: Violation[] };
 }
 
 export interface EditorInstance {
@@ -68,6 +80,12 @@ export interface EditorInstance {
   isCreatingBuilding(): boolean;
   getDraftBuildingPoints(): Vec2[];
   getBuildingCreationMode(): BuildingCreationMode;
+
+  // Interactive row / table creation
+  startRowCreation(options?: RowCreationOptions, buildingId?: string): void;
+  cancelRowCreation(): void;
+  isCreatingRow(): boolean;
+  getDraftRowPoints(): Vec2[];
 
   // Viewport / Zoom & Pan
   zoomIn(factor?: number): void;
@@ -111,6 +129,7 @@ export interface EditorInstance {
       seatSpacing?: number;
       seatRadius?: number;
       tableWidth?: number;
+      tableLength?: number;
       rotation?: number;
     }
   ): Row | null;

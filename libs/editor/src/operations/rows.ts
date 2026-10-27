@@ -25,6 +25,7 @@ export class RowOperations {
       seatSpacing?: number;
       seatRadius?: number;
       tableWidth?: number;
+      tableLength?: number;
       rotation?: number;
     }
   ): Row | null {
@@ -87,6 +88,7 @@ export class RowOperations {
       seatSpacing,
       seatRadius,
       tableWidth,
+      tableLength: opts?.tableLength,
       seats,
     };
 
