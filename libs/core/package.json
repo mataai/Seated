@@ -1,6 +1,6 @@
 {
   "name": "@open-seats/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Floorplan schema, 2D geometry, layout validation and spatial indexing for OpenSeats.",
   "license": "GPL-3.0-or-later",
   "keywords": [
