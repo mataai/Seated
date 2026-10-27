@@ -106,6 +106,9 @@ export class SeatsEditorComponent
   public newRowSeatRadius = 14;
   public newRowTableWidth = 28;
   public newRowRotation = 0;
+  public isDrawingRow = false;
+  public draftRowPointsCount = 0;
+  public rowCreationError: string | null = null;
   public nudgeStep = 10;
 
   // Preset Colors for Zones
@@ -300,6 +303,49 @@ export class SeatsEditorComponent
       this.editor.on('buildingCreationFailed', (payload) => {
         this.ngZone.run(() => {
           this.buildingCreationError = payload.reason;
+          this.cdr.markForCheck();
+        });
+      });
+
+      this.editor.on('rowCreationStarted', () => {
+        this.ngZone.run(() => {
+          this.isDrawingRow = true;
+          this.draftRowPointsCount = 0;
+          this.rowCreationError = null;
+          this.cdr.markForCheck();
+        });
+      });
+
+      this.editor.on('rowCreationPointsChange', (pts) => {
+        this.ngZone.run(() => {
+          this.draftRowPointsCount = pts.length;
+          this.rowCreationError = null;
+          this.cdr.markForCheck();
+        });
+      });
+
+      this.editor.on('rowCreationCompleted', (r) => {
+        this.ngZone.run(() => {
+          this.isDrawingRow = false;
+          this.draftRowPointsCount = 0;
+          this.rowCreationError = null;
+          this.selectNode(r.id, 'row');
+          this.cdr.markForCheck();
+        });
+      });
+
+      this.editor.on('rowCreationCancelled', () => {
+        this.ngZone.run(() => {
+          this.isDrawingRow = false;
+          this.draftRowPointsCount = 0;
+          this.rowCreationError = null;
+          this.cdr.markForCheck();
+        });
+      });
+
+      this.editor.on('rowCreationFailed', (payload) => {
+        this.ngZone.run(() => {
+          this.rowCreationError = payload.reason;
           this.cdr.markForCheck();
         });
       });
@@ -663,36 +709,36 @@ export class SeatsEditorComponent
     return res;
   }
 
-  public createRowFromForm(): Row | null {
+  public startRowCreation(): void {
     const bId =
       this.rowTargetBuildingId ||
       this.selectedBuilding?.id ||
       this.currentFloorplan?.buildings?.[0]?.id;
 
-    if (!bId) return null;
-    const b = this.currentFloorplan?.buildings?.find((item) => item.id === bId);
-    if (!b) return null;
-
-    const posX = 40 + ((b.rows?.length ?? 0) % 5) * 20;
-    const posY = 40 + ((b.rows?.length ?? 0) % 5) * 50;
-
-    const row = this.createRow(
-      bId,
-      { x: posX, y: posY },
-      this.newRowSeatCount,
+    this.editor?.startRowCreation(
       {
         side: this.newRowSide,
         seatSpacing: this.newRowSeatSpacing,
         seatRadius: this.newRowSeatRadius,
         tableWidth: this.newRowTableWidth,
-        rotation: this.newRowRotation,
-      }
+      },
+      bId
     );
+    this.cdr.markForCheck();
+  }
 
-    if (row) {
-      this.selectNode(row.id, 'row');
+  public cancelRowCreation(): void {
+    this.editor?.cancelRowCreation();
+    this.cdr.markForCheck();
+  }
+
+  public createRowFromForm(): Row | null {
+    if (this.isDrawingRow) {
+      this.cancelRowCreation();
+      return null;
     }
-    return row;
+    this.startRowCreation();
+    return null;
   }
 
   public addSeatToRow(

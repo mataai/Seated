@@ -143,4 +143,45 @@ describe('SeatsEditorComponent', () => {
     fixture.detectChanges();
     expect(component.buildingCreationError).toBeNull();
   });
+
+  it('manages table drawing creation mode and updates state', () => {
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.detectChanges();
+
+    expect(component.isDrawingRow).toBe(false);
+    expect(component.draftRowPointsCount).toBe(0);
+
+    component.startRowCreation();
+    fixture.detectChanges();
+
+    expect(component.isDrawingRow).toBe(true);
+    expect(component.currentTool).toBe('row');
+
+    component.cancelRowCreation();
+    fixture.detectChanges();
+
+    expect(component.isDrawingRow).toBe(false);
+    expect(component.currentTool).toBe('select');
+  });
+
+  it('updates rowCreationError when rowCreationFailed event is received', () => {
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.detectChanges();
+
+    component.startRowCreation();
+    fixture.detectChanges();
+
+    (component as any).editor?.emitter?.emit('rowCreationFailed', {
+      reason: 'Click inside a building to place the table.',
+    });
+    fixture.detectChanges();
+
+    expect(component.rowCreationError).toBe(
+      'Click inside a building to place the table.'
+    );
+
+    component.cancelRowCreation();
+    fixture.detectChanges();
+    expect(component.rowCreationError).toBeNull();
+  });
 });
