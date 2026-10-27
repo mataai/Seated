@@ -1,6 +1,6 @@
 {
   "name": "@open-seats/editor",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Visual floorplan editor for buildings, zones, tables, rows and seats.",
   "license": "GPL-3.0-or-later",
   "keywords": [
@@ -36,8 +36,8 @@
   },
   "sideEffects": false,
   "dependencies": {
-    "@open-seats/core": "0.1.1",
-    "@open-seats/renderer": "0.1.1",
-    "@open-seats/viewer": "0.1.1"
+    "@open-seats/core": "0.1.2",
+    "@open-seats/renderer": "0.1.2",
+    "@open-seats/viewer": "0.1.2"
   }
 }
