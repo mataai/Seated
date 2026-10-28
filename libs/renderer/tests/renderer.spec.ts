@@ -196,4 +196,51 @@ describe('Renderer (KonvaRenderer)', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('renders draft row with red glow and dynamic reason badge when invalid', () => {
+    renderer = createRenderer({ container });
+    const end1 = { x: 100, y: 100 };
+    const end2 = { x: 250, y: 100 };
+
+    // Invalid draft row
+    renderer.renderDraftRow?.(
+      end1,
+      end2,
+      { tableWidth: 28 },
+      true,
+      'overlaps table'
+    );
+    const overlayLayer = (renderer as any).overlayLayer;
+    const children = overlayLayer.getChildren();
+    expect(children.length).toBeGreaterThan(0);
+
+    // Group containing tableRect
+    const group = children.find((c: any) => c.getClassName?.() === 'Group');
+    expect(group).toBeDefined();
+    const tableRect = group
+      .getChildren()
+      .find((c: any) => c.getClassName?.() === 'Rect');
+    expect(tableRect).toBeDefined();
+    expect(tableRect.fill()).toBe('rgba(239, 68, 68, 0.2)');
+    expect(tableRect.stroke()).toBe('#ef4444');
+    expect(tableRect.shadowEnabled()).toBe(true);
+    expect(tableRect.shadowColor()).toBe('#ef4444');
+
+    // Badge text
+    const badgeText = children.find((c: any) => c.getClassName?.() === 'Text');
+    expect(badgeText).toBeDefined();
+    expect(badgeText.text()).toContain('(overlaps table)');
+
+    // Valid draft row
+    renderer.renderDraftRow?.(end1, end2, { tableWidth: 28 }, false);
+    const validGroup = overlayLayer
+      .getChildren()
+      .find((c: any) => c.getClassName?.() === 'Group');
+    const validTableRect = validGroup
+      .getChildren()
+      .find((c: any) => c.getClassName?.() === 'Rect');
+    expect(validTableRect.fill()).toBe('rgba(99, 102, 241, 0.15)');
+    expect(validTableRect.stroke()).toBe('#6366f1');
+    expect(validTableRect.shadowEnabled()).toBe(false);
+  });
 });

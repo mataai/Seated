@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Floorplan } from '@open-seats/core';
 import { createEditor, type EditorInstance } from '../src';
 
@@ -872,5 +872,102 @@ describe('Editor (@open-seats/editor)', () => {
     expect(failReason).toContain('Click inside a building');
     expect(editor.getDraftRowPoints().length).toBe(0);
     expect(editor.isCreatingRow()).toBe(true);
+  });
+
+  it('correctly marks draft row invalid with appropriate reason across all invalid states', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const editorAny = editor as any;
+
+    // 1. Create an existing row and an existing zone in building b-1 (which is at (50, 50))
+    editor.createRow('b-1', { x: 100, y: 100 }, 4);
+    editor.createZone('b-1', [
+      { x: 300, y: 100 },
+      { x: 400, y: 100 },
+      { x: 400, y: 200 },
+      { x: 300, y: 200 },
+    ]);
+
+    const renderDraftRowSpy = vi.spyOn(editorAny.renderer, 'renderDraftRow');
+
+    editor.startRowCreation();
+    // End 1: click at world position (150, 150) inside b-1
+    editorAny.handleStageClick({ x: 150, y: 150 }, new MouseEvent('click'));
+
+    // Case 1: Too short (dist < 20)
+    editorAny.handleStageMouseMove(
+      { x: 155, y: 150 },
+      new MouseEvent('mousemove')
+    );
+    expect(renderDraftRowSpy).toHaveBeenLastCalledWith(
+      { x: 150, y: 150 },
+      { x: 155, y: 150 },
+      undefined,
+      true,
+      'too short'
+    );
+
+    // Case 2: Overlaps existing row
+    editorAny.handleStageMouseMove(
+      { x: 220, y: 150 },
+      new MouseEvent('mousemove')
+    );
+    expect(renderDraftRowSpy).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      true,
+      'overlaps table'
+    );
+
+    // Case 3: Overlaps existing zone
+    editor.cancelRowCreation();
+    editor.startRowCreation();
+    editorAny.handleStageClick({ x: 320, y: 150 }, new MouseEvent('click'));
+    editorAny.handleStageMouseMove(
+      { x: 380, y: 150 },
+      new MouseEvent('mousemove')
+    );
+    expect(renderDraftRowSpy).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      true,
+      'overlaps zone'
+    );
+
+    // Case 4: Exceeds building boundaries
+    // Endpoints (100, 60) and (200, 60) are inside building b-1 (world y: [50, 450]),
+    // but side 'both' seats extend 42px upward (reaching world y = 18 < 50),
+    // which previously was falsely marked valid by only checking pointInPolygon(end2).
+    editor.cancelRowCreation();
+    editor.startRowCreation();
+    editorAny.handleStageClick({ x: 100, y: 60 }, new MouseEvent('click'));
+    editorAny.handleStageMouseMove(
+      { x: 200, y: 60 },
+      new MouseEvent('mousemove')
+    );
+    expect(renderDraftRowSpy).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      true,
+      'outside building'
+    );
+
+    // Case 5: Completely valid placement
+    editor.cancelRowCreation();
+    editor.startRowCreation();
+    editorAny.handleStageClick({ x: 100, y: 300 }, new MouseEvent('click'));
+    editorAny.handleStageMouseMove(
+      { x: 220, y: 300 },
+      new MouseEvent('mousemove')
+    );
+    expect(renderDraftRowSpy).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      false,
+      undefined
+    );
   });
 });
