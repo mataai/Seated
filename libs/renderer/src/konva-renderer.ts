@@ -575,9 +575,12 @@ export class KonvaRenderer implements Renderer {
 
       // Event wiring
       seatCircle.on('pointerenter', (e) => {
-        if (statusDef.hoverable !== false) {
+        const currentStatus = this.getStatus(seat.id);
+        const currentDef = this.statusRegistry.get(currentStatus);
+        if (currentDef.hoverable !== false) {
           this.hoveredSeatId = seat.id;
-          this.applySeatStyle(seatCircle, statusDef, isSelected, true);
+          const currentSelected = this.selectedSeatIds.has(seat.id);
+          this.applySeatStyle(seatCircle, currentDef, currentSelected, true);
           this.sceneLayer.batchDraw();
           this.options.onSeatHover?.(ctx, e.evt as MouseEvent);
         }
@@ -586,7 +589,10 @@ export class KonvaRenderer implements Renderer {
       seatCircle.on('pointerleave', (e) => {
         if (this.hoveredSeatId === seat.id) {
           this.hoveredSeatId = null;
-          this.applySeatStyle(seatCircle, statusDef, isSelected, false);
+          const currentStatus = this.getStatus(seat.id);
+          const currentDef = this.statusRegistry.get(currentStatus);
+          const currentSelected = this.selectedSeatIds.has(seat.id);
+          this.applySeatStyle(seatCircle, currentDef, currentSelected, false);
           this.sceneLayer.batchDraw();
           this.options.onSeatHoverEnd?.(ctx, e.evt as MouseEvent);
         }
@@ -606,8 +612,12 @@ export class KonvaRenderer implements Renderer {
         if (this.draggableNodes) {
           e.cancelBubble = true;
           this.options.onNodeClick?.(row.id, 'row', e.evt as MouseEvent);
-        } else if (statusDef.selectable) {
-          this.options.onSeatClick?.(ctx, e.evt as MouseEvent | TouchEvent);
+        } else {
+          const currentStatus = this.getStatus(seat.id);
+          const currentDef = this.statusRegistry.get(currentStatus);
+          if (currentDef.selectable) {
+            this.options.onSeatClick?.(ctx, e.evt as MouseEvent | TouchEvent);
+          }
         }
       });
 
@@ -629,23 +639,30 @@ export class KonvaRenderer implements Renderer {
 
     if (isSelected) {
       circle.fill(selStyle.fill ?? DEFAULT_SELECTED_STYLE.fill);
-      circle.stroke(selStyle.stroke ?? DEFAULT_SELECTED_STYLE.stroke);
+      circle.stroke(
+        isHovered
+          ? (hovStyle.stroke ?? DEFAULT_HOVER_STYLE.stroke)
+          : (selStyle.stroke ?? DEFAULT_SELECTED_STYLE.stroke)
+      );
       circle.strokeWidth(
-        selStyle.strokeWidth ?? DEFAULT_SELECTED_STYLE.strokeWidth
+        isHovered
+          ? (hovStyle.strokeWidth ?? DEFAULT_HOVER_STYLE.strokeWidth)
+          : (selStyle.strokeWidth ?? DEFAULT_SELECTED_STYLE.strokeWidth)
       );
       circle.opacity(1);
     } else {
       circle.fill(statusDef.style.fill);
-      circle.stroke(statusDef.style.stroke ?? '#1a1a1a');
-      circle.strokeWidth(1);
-      circle.opacity(statusDef.style.opacity ?? 1);
-    }
-
-    if (isHovered && !isSelected) {
-      circle.stroke(hovStyle.stroke ?? DEFAULT_HOVER_STYLE.stroke);
-      circle.strokeWidth(
-        hovStyle.strokeWidth ?? DEFAULT_HOVER_STYLE.strokeWidth
+      circle.stroke(
+        isHovered
+          ? (hovStyle.stroke ?? DEFAULT_HOVER_STYLE.stroke)
+          : (statusDef.style.stroke ?? '#1a1a1a')
       );
+      circle.strokeWidth(
+        isHovered
+          ? (hovStyle.strokeWidth ?? DEFAULT_HOVER_STYLE.strokeWidth)
+          : 1
+      );
+      circle.opacity(statusDef.style.opacity ?? 1);
     }
   }
 
