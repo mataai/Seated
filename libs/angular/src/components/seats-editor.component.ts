@@ -78,7 +78,7 @@ export class SeatsEditorComponent
   public lastViolations: Violation[] = [];
 
   // Editions Panel Tab state
-  public editionsTab: 'buildings' | 'zones' | 'rows' = 'buildings';
+  public editionsTab: 'buildings' | 'zones' | 'tables' | 'rows' = 'buildings';
 
   // Editions Forms - Buildings
   public buildingDrawMode: 'draw' | 'rect' = 'draw';
@@ -262,6 +262,7 @@ export class SeatsEditorComponent
 
       this.editor.on('buildingCreationStarted', (mode) => {
         this.ngZone.run(() => {
+          this.editionsTab = 'buildings';
           this.isDrawingBuilding = true;
           this.buildingCreationMode =
             mode ||
@@ -308,6 +309,7 @@ export class SeatsEditorComponent
 
       this.editor.on('rowCreationStarted', () => {
         this.ngZone.run(() => {
+          this.editionsTab = 'tables';
           this.isDrawingRow = true;
           this.draftRowPointsCount = 0;
           this.rowCreationError = null;
@@ -507,7 +509,25 @@ export class SeatsEditorComponent
     this.cdr.markForCheck();
   }
 
+  public switchEditionsTab(
+    tab: 'buildings' | 'zones' | 'tables' | 'rows'
+  ): void {
+    if (this.isDrawingBuilding && tab !== 'buildings') {
+      this.cancelBuildingCreation();
+    }
+    if (this.isDrawingRow && tab !== 'tables' && tab !== 'rows') {
+      this.cancelRowCreation();
+    }
+    this.editionsTab = tab;
+    this.cdr.markForCheck();
+  }
+
   public setTool(tool: ToolType): void {
+    if (tool === 'building') {
+      this.editionsTab = 'buildings';
+    } else if (tool === 'row') {
+      this.editionsTab = 'tables';
+    }
     this.currentTool = tool;
     this.editor?.setTool(tool);
     this.cdr.markForCheck();

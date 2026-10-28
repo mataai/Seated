@@ -2,13 +2,15 @@
   <!-- 1. LEFT PANEL: TOOLS & EDITIONS -->
   @if (showToolbar()) {
     <aside class="editor-sidebar editor-left-panel">
-      <!-- Tools & History -->
+      <!-- 1. Canvas Tools -->
       <div class="panel-section">
         <div class="section-title">Canvas Tools</div>
         <div class="tool-grid">
           <button
             class="tool-btn"
-            [class.active]="currentTool === 'select'"
+            [class.active]="
+              currentTool === 'select' && !isDrawingBuilding && !isDrawingRow
+            "
             (click)="setTool('select')"
             title="Select and drag objects"
           >
@@ -22,25 +24,22 @@
           >
             Pan
           </button>
-          <button
-            class="tool-btn"
-            [class.active]="currentTool === 'building'"
-            (click)="setTool('building')"
-            title="Draw building outline"
-          >
-            Draw Building
-          </button>
-          <button
-            class="tool-btn"
-            [class.active]="currentTool === 'row'"
-            (click)="setTool('row')"
-            title="Draw table by clicking two endpoints"
-          >
-            Draw Table
-          </button>
         </div>
 
-        <div class="btn-group" style="margin-top: 8px">
+        <button
+          class="btn preview-btn"
+          [class.btn-primary]="!isPreviewActive"
+          (click)="togglePreview()"
+          style="width: 100%; margin-top: 8px"
+        >
+          {{ isPreviewActive ? 'Exit Preview' : 'Preview Mode' }}
+        </button>
+      </div>
+
+      <!-- 2. Edit & History -->
+      <div class="panel-section">
+        <div class="section-title">Edit & History</div>
+        <div class="btn-group" style="margin-bottom: 6px">
           <button
             class="btn"
             style="flex: 1"
@@ -61,19 +60,6 @@
           </button>
         </div>
 
-        <button
-          class="btn preview-btn"
-          [class.btn-primary]="!isPreviewActive"
-          (click)="togglePreview()"
-          style="width: 100%; margin-top: 8px"
-        >
-          {{ isPreviewActive ? 'Exit Preview' : 'Preview Mode' }}
-        </button>
-      </div>
-
-      <!-- Context Actions -->
-      <div class="panel-section">
-        <div class="section-title">Context Actions</div>
         <div class="context-action-grid">
           <button
             class="context-btn"
@@ -107,33 +93,42 @@
           >
             Duplicate
           </button>
+          <button
+            class="context-btn delete-btn"
+            style="grid-column: span 2"
+            [disabled]="!selectedNodeId"
+            (click)="deleteSelected()"
+            title="Delete selected item (Delete / Backspace)"
+          >
+            Delete
+          </button>
         </div>
       </div>
 
-      <!-- Editions Tabs Header -->
+      <!-- 3. Add Elements -->
       <div class="panel-section editions-section">
-        <div class="section-title">Editions Panel</div>
+        <div class="section-title">Add Elements</div>
         <div class="tab-switcher">
           <button
             class="tab-btn"
             [class.active]="editionsTab === 'buildings'"
-            (click)="editionsTab = 'buildings'"
+            (click)="switchEditionsTab('buildings')"
           >
             Buildings
           </button>
           <button
             class="tab-btn"
             [class.active]="editionsTab === 'zones'"
-            (click)="editionsTab = 'zones'"
+            (click)="switchEditionsTab('zones')"
           >
             Zones
           </button>
           <button
             class="tab-btn"
-            [class.active]="editionsTab === 'rows'"
-            (click)="editionsTab = 'rows'"
+            [class.active]="editionsTab === 'tables' || editionsTab === 'rows'"
+            (click)="switchEditionsTab('tables')"
           >
-            Rows
+            Tables
           </button>
         </div>
 
@@ -261,9 +256,9 @@
                 @if (isDrawingBuilding) {
                   ✕ Cancel Drawing
                 } @else if (buildingDrawMode === 'rect') {
-                  📐 Draw Rectangle (2 Corners)
+                  📐 Draw Rectangle
                 } @else {
-                  ✏️ Start Drawing Outline
+                  ✏️ Draw Outline
                 }
               </button>
             </div>
@@ -363,12 +358,12 @@
             </div>
           }
 
-          <!-- 3. ROWS EDITION -->
-          @if (editionsTab === 'rows') {
+          <!-- 3. TABLES -->
+          @if (editionsTab === 'tables' || editionsTab === 'rows') {
             <div class="edition-card">
               <div class="edition-header">
-                <span class="edition-badge row-badge">ROW</span>
-                <span class="edition-title">Create Row</span>
+                <span class="edition-badge table-badge">TABLE</span>
+                <span class="edition-title">Create Table</span>
               </div>
 
               <div class="form-row">
@@ -453,16 +448,16 @@
 
               <div class="btn-group" style="margin-top: 8px">
                 <button
-                  class="btn btn-primary"
+                  class="btn"
+                  [class.btn-primary]="!isDrawingRow"
+                  [class.btn-danger]="isDrawingRow"
                   style="flex: 1"
                   [class.active]="isDrawingRow"
                   (click)="
                     isDrawingRow ? cancelRowCreation() : startRowCreation()
                   "
                 >
-                  {{
-                    isDrawingRow ? '✕ Cancel Drawing' : '✏️ Draw Table (2 Ends)'
-                  }}
+                  {{ isDrawingRow ? '✕ Cancel Drawing' : '✏️ Draw Table' }}
                 </button>
               </div>
             </div>

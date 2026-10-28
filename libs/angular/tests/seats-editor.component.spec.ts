@@ -204,4 +204,26 @@ describe('SeatsEditorComponent', () => {
       tableWidth: component.newRowTableWidth,
     });
   });
+
+  it('switches tabs and synchronizes tab with tool selection', () => {
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.detectChanges();
+
+    expect(component.editionsTab).toBe('buildings');
+
+    component.switchEditionsTab('tables');
+    expect(component.editionsTab).toBe('tables');
+
+    component.startRowCreation();
+    expect(component.isDrawingRow).toBe(true);
+
+    // Switching away cancels active drawing
+    component.switchEditionsTab('zones');
+    expect(component.editionsTab).toBe('zones');
+    expect(component.isDrawingRow).toBe(false);
+
+    // Setting tool to building switches tab to buildings
+    component.setTool('building');
+    expect(component.editionsTab).toBe('buildings');
+  });
 });

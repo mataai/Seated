@@ -311,6 +311,15 @@
     opacity: 0.35;
     cursor: not-allowed;
   }
+
+  &.delete-btn {
+    color: #f87171;
+    &:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #ef4444;
+    }
+  }
 }
 
 .editions-section {
@@ -381,7 +390,8 @@
     background: rgba(236, 72, 153, 0.2);
     color: #f472b6;
   }
-  &.row-badge {
+  &.row-badge,
+  &.table-badge {
     background: rgba(16, 185, 129, 0.2);
     color: #34d399;
   }
