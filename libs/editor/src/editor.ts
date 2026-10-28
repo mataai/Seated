@@ -570,43 +570,17 @@ export class Editor implements EditorInstance {
         return;
       }
 
-      // Compute local building coordinates
-      const local1 = inverseTransformPoint(
-        end1,
-        building.position,
-        building.rotation
-      );
-      const local2 = inverseTransformPoint(
-        end2,
-        building.position,
-        building.rotation
-      );
-
-      const ldx = local2.x - local1.x;
-      const ldy = local2.y - local1.y;
-      const localDist = Math.hypot(ldx, ldy);
-      const angleDeg = (Math.atan2(ldy, ldx) * 180) / Math.PI;
-
-      const opts = this.draftRowOpts;
-      const side = opts?.side ?? 'both';
-      const nominalSpacing = opts?.seatSpacing ?? 40;
-      const seatRadius = opts?.seatRadius ?? 14;
-      const tableWidth = opts?.tableWidth ?? 28;
-
-      // Dynamic calculation: keep exact user-drawn length localDist,
-      // and determine seat count & spacing by rounding (L - 2*r) / spacing
-      const availLength = Math.max(0, localDist - 2 * seatRadius);
-      const slots = Math.max(1, Math.round(availLength / nominalSpacing) + 1);
-      const seatCount = side === 'both' ? slots * 2 : slots;
-      const effectiveSpacing =
-        slots > 1 ? availLength / (slots - 1) : nominalSpacing;
-
-      // Position offset along table axis by seatRadius
-      const rad = (angleDeg * Math.PI) / 180;
-      const rowPos: Vec2 = {
-        x: Math.round((local1.x + Math.cos(rad) * seatRadius) * 100) / 100,
-        y: Math.round((local1.y + Math.sin(rad) * seatRadius) * 100) / 100,
-      };
+      // Compute local building coordinates and row parameters
+      const {
+        localDist,
+        angleDeg,
+        side,
+        seatCount,
+        effectiveSpacing,
+        seatRadius,
+        tableWidth,
+        rowPos,
+      } = this.computeDraftRowParams(building, end1, end2, this.draftRowOpts);
 
       const createdRow = this.createRow(building.id, rowPos, seatCount, {
         side,
@@ -745,32 +719,203 @@ export class Editor implements EditorInstance {
     this.renderer?.renderDraftPolygon(this.draftBuildingPoints, ptToAdd);
   }
 
+  private computeDraftRowParams(
+    building: Building,
+    end1: Vec2,
+    end2: Vec2,
+    opts?: RowCreationOptions
+  ): {
+    localDist: number;
+    angleDeg: number;
+    side: 'one' | 'both';
+    seatCount: number;
+    effectiveSpacing: number;
+    seatRadius: number;
+    tableWidth: number;
+    rowPos: Vec2;
+  } {
+    const local1 = inverseTransformPoint(
+      end1,
+      building.position,
+      building.rotation
+    );
+    const local2 = inverseTransformPoint(
+      end2,
+      building.position,
+      building.rotation
+    );
+
+    const ldx = local2.x - local1.x;
+    const ldy = local2.y - local1.y;
+    const localDist = Math.hypot(ldx, ldy);
+    const angleDeg = (Math.atan2(ldy, ldx) * 180) / Math.PI;
+
+    const side = opts?.side ?? 'both';
+    const nominalSpacing = opts?.seatSpacing ?? 40;
+    const seatRadius = opts?.seatRadius ?? 14;
+    const tableWidth = opts?.tableWidth ?? 28;
+
+    const availLength = Math.max(0, localDist - 2 * seatRadius);
+    const slots = Math.max(1, Math.round(availLength / nominalSpacing) + 1);
+    const seatCount = side === 'both' ? slots * 2 : slots;
+    const effectiveSpacing =
+      slots > 1 ? availLength / (slots - 1) : nominalSpacing;
+
+    const rad = (angleDeg * Math.PI) / 180;
+    const rowPos: Vec2 = {
+      x: Math.round((local1.x + Math.cos(rad) * seatRadius) * 100) / 100,
+      y: Math.round((local1.y + Math.sin(rad) * seatRadius) * 100) / 100,
+    };
+
+    return {
+      localDist,
+      angleDeg,
+      side,
+      seatCount,
+      effectiveSpacing,
+      seatRadius,
+      tableWidth,
+      rowPos,
+    };
+  }
+
+  private validateDraftRow(
+    building: Building | undefined,
+    end1: Vec2,
+    end2: Vec2,
+    opts?: RowCreationOptions
+  ): { isInvalid: boolean; reason?: string } {
+    const dist = Math.hypot(end2.x - end1.x, end2.y - end1.y);
+    if (dist < 20) {
+      return { isInvalid: true, reason: 'too short' };
+    }
+
+    if (!building) {
+      return { isInvalid: true, reason: 'outside building' };
+    }
+
+    if (!this.rules.enforce) {
+      return { isInvalid: false };
+    }
+
+    const {
+      localDist,
+      angleDeg,
+      side,
+      seatCount,
+      effectiveSpacing,
+      seatRadius,
+      tableWidth,
+      rowPos,
+    } = this.computeDraftRowParams(building, end1, end2, opts);
+
+    const snappedRowPos = this.snap(rowPos);
+
+    const count = Math.max(1, seatCount);
+    const seats: Seat[] = [];
+    if (side === 'both') {
+      const seatSlots = Math.ceil(count / 2);
+      let created = 0;
+      for (let i = 0; i < seatSlots; i++) {
+        seats.push({
+          id: `__draft_s_${i}a`,
+          index: i,
+          side: 'a',
+          label: `${i + 1}a`,
+        });
+        created++;
+        if (created < count) {
+          seats.push({
+            id: `__draft_s_${i}b`,
+            index: i,
+            side: 'b',
+            label: `${i + 1}b`,
+          });
+          created++;
+        }
+      }
+    } else {
+      for (let i = 0; i < count; i++) {
+        seats.push({
+          id: `__draft_s_${i}`,
+          index: i,
+          side: 'a',
+          label: `${i + 1}`,
+        });
+      }
+    }
+
+    const candidateRow: Row = {
+      id: '__draft_preview_row__',
+      label: '',
+      position: snappedRowPos,
+      rotation: Math.round(angleDeg * 10) / 10,
+      side,
+      seatSpacing: Math.round(effectiveSpacing * 100) / 100,
+      seatRadius,
+      tableWidth,
+      tableLength: Math.round(localDist * 100) / 100,
+      seats,
+    };
+
+    const testPlan: Floorplan = {
+      ...this.floorplan,
+      buildings: this.floorplan.buildings.map((b) =>
+        b.id === building.id
+          ? { ...b, rows: [...(b.rows ?? []), candidateRow] }
+          : b
+      ),
+    };
+
+    const violations = canPlace(
+      testPlan,
+      candidateRow.id,
+      {},
+      { tolerance: this.rules.tolerance }
+    );
+
+    if (violations.length > 0) {
+      let reason = 'invalid';
+      if (violations.some((v) => v.rule === 'row-overlap')) {
+        reason = 'overlaps table';
+      } else if (violations.some((v) => v.rule === 'zone-row-overlap')) {
+        reason = 'overlaps zone';
+      } else if (violations.some((v) => v.rule === 'out-of-bounds')) {
+        reason = 'outside building';
+      } else if (violations.some((v) => v.rule === 'seat-overlap')) {
+        reason = 'seat overlap';
+      }
+      return { isInvalid: true, reason };
+    }
+
+    return { isInvalid: false };
+  }
+
   private handleStageMouseMove(worldPos: Vec2, _evt: MouseEvent): void {
     if (this.isDrawingRow && this.draftRowPoints.length === 1) {
       const end1 = this.draftRowPoints[0];
       const end2 = this.snap(worldPos);
 
-      let isInvalid = false;
-      if (this.rules.enforce) {
-        const building = this.draftRowBuildingId
-          ? this.floorplan.buildings.find(
-              (b) => b.id === this.draftRowBuildingId
-            )
-          : this.floorplan.buildings.find((b) =>
-              pointInPolygon(end1, buildingFootprint(b))
-            );
+      const building = this.draftRowBuildingId
+        ? this.floorplan.buildings.find((b) => b.id === this.draftRowBuildingId)
+        : this.floorplan.buildings.find((b) =>
+            pointInPolygon(end1, buildingFootprint(b))
+          );
 
-        if (!building) {
-          isInvalid = true;
-        } else {
-          const bPoly = buildingFootprint(building);
-          if (!pointInPolygon(end2, bPoly)) {
-            isInvalid = true;
-          }
-        }
-      }
+      const { isInvalid, reason } = this.validateDraftRow(
+        building,
+        end1,
+        end2,
+        this.draftRowOpts
+      );
 
-      this.renderer?.renderDraftRow?.(end1, end2, this.draftRowOpts, isInvalid);
+      this.renderer?.renderDraftRow?.(
+        end1,
+        end2,
+        this.draftRowOpts,
+        isInvalid,
+        reason
+      );
       return;
     }
 

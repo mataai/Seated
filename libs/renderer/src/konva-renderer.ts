@@ -1112,7 +1112,8 @@ export class KonvaRenderer implements Renderer {
       tableWidth?: number;
       side?: 'one' | 'both';
     },
-    isInvalid = false
+    isInvalid = false,
+    invalidReason?: string
   ): void {
     this.overlayLayer.destroyChildren();
 
@@ -1174,6 +1175,10 @@ export class KonvaRenderer implements Renderer {
       strokeWidth: 2 / scale,
       dash: isInvalid ? [4 / scale, 4 / scale] : [6 / scale, 4 / scale],
       cornerRadius: 4 / scale,
+      shadowColor: '#ef4444',
+      shadowBlur: 8 / scale,
+      shadowOpacity: 0.4,
+      shadowEnabled: isInvalid,
       listening: false,
     });
     draftGroup.add(tableRect);
@@ -1251,8 +1256,11 @@ export class KonvaRenderer implements Renderer {
     // Live dimensions & seats count badge
     if (length > 20) {
       const totalSeats = slots * (side === 'both' ? 2 : 1);
+      const reasonSuffix = invalidReason
+        ? ` (${invalidReason})`
+        : ' (outside building)';
       const textVal = isInvalid
-        ? `${Math.round(length)}px • ${totalSeats} seats (outside building)`
+        ? `${Math.round(length)}px • ${totalSeats} seats${reasonSuffix}`
         : `${Math.round(length)}px • ${totalSeats} seats`;
       const badgePos = {
         x: (end1.x + end2.x) / 2,

@@ -98,7 +98,8 @@ export interface Renderer {
       tableWidth?: number;
       side?: 'one' | 'both';
     },
-    isInvalid?: boolean
+    isInvalid?: boolean,
+    invalidReason?: string
   ): void;
   clearDraftPolygon(): void;
   getPointerWorldPosition(): Vec2 | null;
