@@ -99,7 +99,6 @@ export class SeatsEditorComponent
   public newZoneHeight = 90;
 
   // Editions Forms - Rows
-  public rowTargetBuildingId = '';
   public newRowSeatCount = 8;
   public newRowSide: 'one' | 'both' = 'both';
   public newRowSeatSpacing = 40;
@@ -710,20 +709,12 @@ export class SeatsEditorComponent
   }
 
   public startRowCreation(): void {
-    const bId =
-      this.rowTargetBuildingId ||
-      this.selectedBuilding?.id ||
-      this.currentFloorplan?.buildings?.[0]?.id;
-
-    this.editor?.startRowCreation(
-      {
-        side: this.newRowSide,
-        seatSpacing: this.newRowSeatSpacing,
-        seatRadius: this.newRowSeatRadius,
-        tableWidth: this.newRowTableWidth,
-      },
-      bId
-    );
+    this.editor?.startRowCreation({
+      side: this.newRowSide,
+      seatSpacing: this.newRowSeatSpacing,
+      seatRadius: this.newRowSeatRadius,
+      tableWidth: this.newRowTableWidth,
+    });
     this.cdr.markForCheck();
   }
 

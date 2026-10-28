@@ -82,7 +82,7 @@ export interface EditorInstance {
   getBuildingCreationMode(): BuildingCreationMode;
 
   // Interactive row / table creation
-  startRowCreation(options?: RowCreationOptions, buildingId?: string): void;
+  startRowCreation(options?: RowCreationOptions): void;
   cancelRowCreation(): void;
   isCreatingRow(): boolean;
   getDraftRowPoints(): Vec2[];

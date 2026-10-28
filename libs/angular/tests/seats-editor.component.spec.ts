@@ -184,4 +184,24 @@ describe('SeatsEditorComponent', () => {
     fixture.detectChanges();
     expect(component.rowCreationError).toBeNull();
   });
+
+  it('initiates row creation without pre-defining a target building', () => {
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.detectChanges();
+
+    const startRowCreationSpy = vi.spyOn(
+      (component as any).editor,
+      'startRowCreation'
+    );
+
+    component.startRowCreation();
+    fixture.detectChanges();
+
+    expect(startRowCreationSpy).toHaveBeenCalledWith({
+      side: component.newRowSide,
+      seatSpacing: component.newRowSeatSpacing,
+      seatRadius: component.newRowSeatRadius,
+      tableWidth: component.newRowTableWidth,
+    });
+  });
 });

@@ -970,4 +970,32 @@ describe('Editor (@open-seats/editor)', () => {
       undefined
     );
   });
+
+  it('computes which building the table will be in based on the first point click without pre-defining the building', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const editorAny = editor as any;
+
+    let completedRow: any = null;
+    editor.on('rowCreationCompleted', (row) => (completedRow = row));
+
+    // Start row creation without pre-defining any building
+    editor.startRowCreation();
+    expect(editor.isCreatingRow()).toBe(true);
+
+    // Click End 1 inside Annex (b-2: x 600..900, y 50..450)
+    editorAny.handleStageClick({ x: 650, y: 150 }, new MouseEvent('click'));
+    expect(editor.getDraftRowPoints().length).toBe(1);
+
+    // Click End 2 inside Annex
+    editorAny.handleStageClick({ x: 750, y: 150 }, new MouseEvent('click'));
+
+    expect(completedRow).not.toBeNull();
+    const plan = editor.getFloorplan();
+    const b1 = plan.buildings.find((b) => b.id === 'b-1');
+    const b2 = plan.buildings.find((b) => b.id === 'b-2');
+
+    expect(b1?.rows.length).toBe(0);
+    expect(b2?.rows.length).toBe(1);
+    expect(b2?.rows[0].id).toBe(completedRow.id);
+  });
 });
