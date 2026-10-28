@@ -214,8 +214,15 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   flex-shrink: 0;
   z-index: 10;
+  transition:
+    width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   &::-webkit-scrollbar {
     width: 5px;
@@ -224,19 +231,56 @@
     background: #27272a;
     border-radius: 4px;
   }
+
+  &.collapsed {
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+    pointer-events: none;
+    visibility: hidden;
+  }
 }
 
 .editor-left-panel {
   width: 290px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 14px;
-  gap: 16px;
+  padding: 0;
+
+  .left-panel-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    min-width: 290px;
+  }
+
+  .left-panel-content {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    min-width: 290px;
+  }
 }
 
 .editor-right-panel {
   width: 320px;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0;
+
+  .panel-header {
+    min-width: 320px;
+  }
+
+  .panel-body {
+    min-width: 320px;
+  }
 }
 
 .panel-section {
@@ -311,6 +355,21 @@
     opacity: 0.35;
     cursor: not-allowed;
   }
+
+  &.delete-btn {
+    grid-column: span 2;
+    color: #f87171;
+    &:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #ef4444;
+    }
+  }
+}
+
+.preview-btn {
+  width: 100%;
+  margin-top: 8px;
 }
 
 .editions-section {
@@ -381,7 +440,8 @@
     background: rgba(236, 72, 153, 0.2);
     color: #f472b6;
   }
-  &.row-badge {
+  &.row-badge,
+  &.table-badge {
     background: rgba(16, 185, 129, 0.2);
     color: #34d399;
   }
@@ -490,6 +550,11 @@
   z-index: 9;
   max-width: 50%;
   flex-wrap: wrap;
+  transition: left 0.25s ease;
+
+  &.has-collapsed-left {
+    left: 110px;
+  }
 }
 
 .violation-tag {
@@ -720,11 +785,117 @@
 // Right Panel: Object Properties
 // -------------------------------------------------------------
 .panel-header {
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
+}
+
+.panel-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #f4f4f5;
+
+  .panel-icon {
+    color: #818cf8;
+    flex-shrink: 0;
+  }
+}
+
+.panel-collapse-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #a1a1aa;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: #27272a;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.canvas-panel-toggle {
+  position: absolute;
+  top: 14px;
+  z-index: 10;
+  background: rgba(20, 20, 23, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d4d4d8;
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: all 0.15s ease;
+  user-select: none;
+
+  &:hover {
+    background: #27272a;
+    color: #ffffff;
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.25);
+  }
+
+  &.left-toggle {
+    left: 14px;
+    animation: fadeInSlideRight 0.2s ease-out;
+  }
+
+  &.right-toggle {
+    right: 14px;
+    animation: fadeInSlideLeft 0.2s ease-out;
+  }
+
+  .toggle-pill {
+    font-size: 9px;
+    background: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+}
+
+@keyframes fadeInSlideRight {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeInSlideLeft {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .panel-title {

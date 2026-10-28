@@ -998,4 +998,24 @@ describe('Editor (@open-seats/editor)', () => {
     expect(b2?.rows.length).toBe(1);
     expect(b2?.rows[0].id).toBe(completedRow.id);
   });
+
+  it('resets draft row points and building ID when table creation fails due to bounds or overlap', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const editorAny = editor as any;
+
+    let failedPayload: any = null;
+    editor.on('rowCreationFailed', (payload) => (failedPayload = payload));
+
+    editor.startRowCreation();
+    // Click End 1 inside Main Hall (b-1: x 50..550, y 50..450)
+    editorAny.handleStageClick({ x: 500, y: 150 }, new MouseEvent('click'));
+    expect(editor.getDraftRowPoints().length).toBe(1);
+
+    // Click End 2 far outside building bounds
+    editorAny.handleStageClick({ x: 9999, y: 150 }, new MouseEvent('click'));
+
+    expect(failedPayload).not.toBeNull();
+    expect(editor.getDraftRowPoints().length).toBe(0);
+    expect(editorAny.draftRowBuildingId).toBeUndefined();
+  });
 });
