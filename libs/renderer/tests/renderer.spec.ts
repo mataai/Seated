@@ -92,7 +92,7 @@ describe('Renderer (KonvaRenderer)', () => {
     expect(renderer.getFloorplan()?.schemaVersion).toBe(1);
   });
 
-  it('handles seat selection and triggers onSelectionChange', () => {
+  it('handles seat selection and triggers onSelectionChange with blue styling that persists across hover and leave', () => {
     const onSelectionChange = vi.fn();
     renderer = createRenderer({
       container,
@@ -100,9 +100,23 @@ describe('Renderer (KonvaRenderer)', () => {
       onSelectionChange,
     });
 
+    const circle1 = (renderer as any).seatCircles.get('s-1');
+    expect(circle1).toBeDefined();
+    expect(circle1.fill()).toBe('#4caf50'); // default available status (green)
+
+    // Select seat s-1 -> turns blue
     renderer.selectSeats(['s-1']);
     expect(renderer.getSelectedSeatIds()).toEqual(['s-1']);
     expect(onSelectionChange).toHaveBeenCalledWith(['s-1']);
+    expect(circle1.fill()).toBe('#2196f3'); // selected color (blue)
+
+    // Hover over selected seat -> stays blue
+    circle1.fire('pointerenter', { evt: new MouseEvent('pointerenter') });
+    expect(circle1.fill()).toBe('#2196f3');
+
+    // Pointer leaves selected seat -> stays blue (does not revert to green)
+    circle1.fire('pointerleave', { evt: new MouseEvent('pointerleave') });
+    expect(circle1.fill()).toBe('#2196f3');
 
     renderer.selectSeats(['s-2']);
     expect(renderer.getSelectedSeatIds()).toContain('s-1');
@@ -110,6 +124,7 @@ describe('Renderer (KonvaRenderer)', () => {
 
     renderer.deselectSeats(['s-1']);
     expect(renderer.getSelectedSeatIds()).toEqual(['s-2']);
+    expect(circle1.fill()).toBe('#4caf50'); // reverted to green
 
     renderer.clearSelection();
     expect(renderer.getSelectedSeatIds()).toEqual([]);
