@@ -70,6 +70,11 @@ export class CommandStack {
     return true;
   }
 
+  /** The most recent undoable command, if any. */
+  public peek(): Command | undefined {
+    return this.undoStack[this.undoStack.length - 1];
+  }
+
   public canUndo(): boolean {
     return this.undoStack.length > 0;
   }

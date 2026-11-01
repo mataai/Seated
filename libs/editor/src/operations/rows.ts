@@ -55,7 +55,7 @@ export class RowOperations {
           id: NumberingService.nextSeatId(),
           index: i,
           side: 'a',
-          label: `${rowLetter}-${i + 1}a`,
+          label: '',
         });
         created++;
         if (created < count) {
@@ -63,7 +63,7 @@ export class RowOperations {
             id: NumberingService.nextSeatId(),
             index: i,
             side: 'b',
-            label: `${rowLetter}-${i + 1}b`,
+            label: '',
           });
           created++;
         }
@@ -74,7 +74,7 @@ export class RowOperations {
           id: NumberingService.nextSeatId(),
           index: i,
           side: 'a',
-          label: `${rowLetter}-${i + 1}`,
+          label: '',
         });
       }
     }
@@ -91,6 +91,7 @@ export class RowOperations {
       tableLength: opts?.tableLength,
       seats,
     };
+    newRow.seats = NumberingService.renumberRowSeats(newRow, building.label);
 
     if (this.ctx.rules.enforce) {
       const testPlan: Floorplan = {
@@ -163,10 +164,10 @@ export class RowOperations {
     };
 
     const proposedSeats = [...row.seats, newSeat];
-    const renumbered = NumberingService.renumberRowSeats({
-      ...row,
-      seats: proposedSeats,
-    });
+    const renumbered = NumberingService.renumberRowSeats(
+      { ...row, seats: proposedSeats },
+      building.label
+    );
 
     if (this.ctx.rules.enforce) {
       const violations = canPlace(
@@ -246,6 +247,10 @@ export class RowOperations {
       position: this.ctx.snap(newLocalPos),
       rotation: newLocalRot,
     };
+    proposedRow.seats = NumberingService.renumberRowSeats(
+      proposedRow,
+      targetBuilding.label
+    );
 
     if (this.ctx.rules.enforce) {
       // Test containment and overlap in target building
@@ -287,6 +292,7 @@ export class RowOperations {
 
     const oldPos = movingRow.position;
     const oldRot = movingRow.rotation;
+    const oldSeats = movingRow.seats;
 
     const command: Command = {
       name: `Reparent Row ${movingRow.label} to ${targetBuilding.label}`,
@@ -294,12 +300,14 @@ export class RowOperations {
         srcBuilding.rows = srcBuilding.rows.filter((r) => r.id !== rowId);
         movingRow.position = proposedRow.position;
         movingRow.rotation = proposedRow.rotation;
+        movingRow.seats = proposedRow.seats;
         targetBuilding.rows.push(movingRow);
       },
       undo: () => {
         targetBuilding.rows = targetBuilding.rows.filter((r) => r.id !== rowId);
         movingRow.position = oldPos;
         movingRow.rotation = oldRot;
+        movingRow.seats = oldSeats;
         srcBuilding.rows.push(movingRow);
       },
     };
@@ -326,11 +334,19 @@ export class RowOperations {
 
     let sourceRow: Row | undefined;
     let targetRow: Row | undefined;
+    let sourceBuildingLabel: string | undefined;
+    let targetBuildingLabel: string | undefined;
 
     for (const b of this.ctx.floorplan.buildings) {
       for (const r of b.rows ?? []) {
-        if (r.id === sourceRowId) sourceRow = r;
-        if (r.id === targetRowId) targetRow = r;
+        if (r.id === sourceRowId) {
+          sourceRow = r;
+          sourceBuildingLabel = b.label;
+        }
+        if (r.id === targetRowId) {
+          targetRow = r;
+          targetBuildingLabel = b.label;
+        }
       }
     }
 
@@ -359,15 +375,15 @@ export class RowOperations {
       side: targetSide,
     };
 
-    const proposedTargetSeats = NumberingService.renumberRowSeats({
-      ...targetRow,
-      seats: [...targetRow.seats, proposedSeat],
-    });
+    const proposedTargetSeats = NumberingService.renumberRowSeats(
+      { ...targetRow, seats: [...targetRow.seats, proposedSeat] },
+      targetBuildingLabel
+    );
 
-    const proposedSourceSeats = NumberingService.renumberRowSeats({
-      ...sourceRow,
-      seats: sourceRow.seats.filter((s) => s.id !== seatId),
-    });
+    const proposedSourceSeats = NumberingService.renumberRowSeats(
+      { ...sourceRow, seats: sourceRow.seats.filter((s) => s.id !== seatId) },
+      sourceBuildingLabel
+    );
 
     if (this.ctx.rules.enforce) {
       const violations = canPlace(
@@ -403,10 +419,12 @@ export class RowOperations {
 
   public setRowSide(rowId: string, side: 'one' | 'both'): boolean {
     let targetRow: Row | undefined;
+    let buildingLabel: string | undefined;
     for (const b of this.ctx.floorplan.buildings) {
       const r = (b.rows ?? []).find((row) => row.id === rowId);
       if (r) {
         targetRow = r;
+        buildingLabel = b.label;
         break;
       }
     }
@@ -418,11 +436,10 @@ export class RowOperations {
         .filter((s) => s.side === 'a')
         .map((s, idx) => ({ ...s, index: idx }));
     }
-    const renumbered = NumberingService.renumberRowSeats({
-      ...targetRow,
-      side,
-      seats: proposedSeats,
-    });
+    const renumbered = NumberingService.renumberRowSeats(
+      { ...targetRow, side, seats: proposedSeats },
+      buildingLabel
+    );
 
     if (this.ctx.rules.enforce) {
       const violations = canPlace(
@@ -572,10 +589,12 @@ export class RowOperations {
   public setRowSeatCount(rowId: string, seatCount: number): boolean {
     if (seatCount < 1) return false;
     let targetRow: Row | undefined;
+    let buildingLabel: string | undefined;
     for (const b of this.ctx.floorplan.buildings) {
       const r = (b.rows ?? []).find((item) => item.id === rowId);
       if (r) {
         targetRow = r;
+        buildingLabel = b.label;
         break;
       }
     }
@@ -645,33 +664,70 @@ export class RowOperations {
       proposedSeats = sorted.slice(sorted.length - seatCount);
     }
 
-    const renumbered = NumberingService.renumberRowSeats({
-      ...targetRow,
-      seats: proposedSeats,
-    });
+    const renumbered = NumberingService.renumberRowSeats(
+      { ...targetRow, seats: proposedSeats },
+      buildingLabel
+    );
+
+    // Keep the table's length fixed and spread the new seats evenly along it.
+    const layout = fitSeatsToTable(targetRow, renumbered);
 
     if (this.ctx.rules.enforce) {
       const violations = canPlace(
         this.ctx.floorplan,
         rowId,
-        { seats: renumbered },
+        { seats: renumbered, ...layout },
         { tolerance: this.ctx.rules.tolerance }
       );
       if (violations.length > 0) return false;
     }
 
     const row = targetRow;
+    const oldSpacing = row.seatSpacing;
+    const oldTableLength = row.tableLength;
     this.ctx.commandStack.execute({
       name: `Set Row ${row.label} seat count to ${seatCount}`,
       execute: () => {
         row.seats = renumbered;
+        row.seatSpacing = layout.seatSpacing;
+        row.tableLength = layout.tableLength;
       },
       undo: () => {
         row.seats = oldSeats;
+        row.seatSpacing = oldSpacing;
+        row.tableLength = oldTableLength;
       },
     });
 
     this.ctx.emitChange();
     return true;
   }
+}
+
+/** Current length of the table body along the seat axis. */
+function tableLengthOf(row: Row): number {
+  if (row.tableLength !== undefined) return row.tableLength;
+  const maxIndex = Math.max(0, ...row.seats.map((s) => s.index));
+  return maxIndex * row.seatSpacing + 2 * row.seatRadius;
+}
+
+/**
+ * Computes the seat spacing that spreads `seats` evenly over the row's
+ * current table length (same layout rule as drawing a table). The length is
+ * pinned on the row so repeated count changes don't drift. If the seats no
+ * longer fit, spacing bottoms out at touching seats and the table grows.
+ */
+function fitSeatsToTable(
+  row: Row,
+  seats: Seat[]
+): { seatSpacing: number; tableLength: number } {
+  const tableLength = tableLengthOf(row);
+  const slots = Math.max(0, ...seats.map((s) => s.index)) + 1;
+  if (slots <= 1) return { seatSpacing: row.seatSpacing, tableLength };
+
+  const availLength = Math.max(0, tableLength - 2 * row.seatRadius);
+  const fitted = availLength / (slots - 1);
+  const seatSpacing =
+    Math.round(Math.max(2 * row.seatRadius, fitted) * 100) / 100;
+  return { seatSpacing, tableLength };
 }

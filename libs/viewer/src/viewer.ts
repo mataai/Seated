@@ -65,7 +65,7 @@ export class Viewer implements ViewerInstance {
       selectedSeatIds: options.selectedSeatIds,
       selectedStyle: options.selectedStyle,
       hoverStyle: options.hoverStyle,
-      showBackground: options.showBackground ?? false,
+      showBackground: options.showBackground ?? true,
       onReady: () => {
         this.emitter.emit('ready', undefined);
       },

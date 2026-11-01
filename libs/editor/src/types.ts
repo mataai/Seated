@@ -74,7 +74,10 @@ export interface EditorInstance {
   isPreview(): boolean;
   setBackground(bg: FloorplanBackground | undefined): void;
   getBackground(): FloorplanBackground | undefined;
-  updateBackground(updates: Partial<FloorplanBackground>): void;
+  updateBackground(
+    updates: Partial<FloorplanBackground>,
+    options?: { merge?: boolean }
+  ): void;
   loadBackgroundFromFile(
     file: File,
     options?: BackgroundLoadOptions

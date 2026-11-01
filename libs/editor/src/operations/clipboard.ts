@@ -134,7 +134,10 @@ export class ClipboardOperations {
             id: NumberingService.nextSeatId(),
           })),
         };
-        newRow.seats = NumberingService.renumberRowSeats(newRow);
+        newRow.seats = NumberingService.renumberRowSeats(
+          newRow,
+          `${original.label} Copy`
+        );
         return newRow;
       }),
     };
@@ -303,7 +306,10 @@ export class ClipboardOperations {
       seats: clonedSeats,
       position: { ...original.position },
     };
-    newRowTemplate.seats = NumberingService.renumberRowSeats(newRowTemplate);
+    newRowTemplate.seats = NumberingService.renumberRowSeats(
+      newRowTemplate,
+      targetBuilding.label
+    );
 
     const rowHeight =
       (original.tableWidth ?? 28) + (original.seatRadius ?? 14) * 4;

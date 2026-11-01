@@ -74,8 +74,31 @@ async function readBlobAsArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   });
 }
 
+/** Realm-safe ArrayBuffer check (buffers from iframes/workers fail `instanceof`). */
+function isArrayBuffer(value: unknown): value is ArrayBuffer {
+  return (
+    value instanceof ArrayBuffer ||
+    Object.prototype.toString.call(value) === '[object ArrayBuffer]'
+  );
+}
+
+let pdfWorkerSrc: string | undefined;
+
+/**
+ * Configures the URL of the pdf.js worker used for PDF blueprints.
+ * Call this before loading PDFs in offline, CSP-restricted, or self-hosted
+ * deployments. When unset, pdf.js's own `GlobalWorkerOptions.workerSrc` is
+ * used if present, otherwise the matching version is loaded from unpkg.
+ */
+export function setPdfWorkerSrc(src: string | undefined): void {
+  pdfWorkerSrc = src;
+}
+
 /**
  * Renders a specific page of a PDF file or buffer to a raster PNG data URL.
+ *
+ * The caller's ArrayBuffer is never transferred to the worker (a copy is
+ * passed), so the same buffer can be reused to render other pages.
  */
 export async function loadPdfPage(
   source: File | Blob | ArrayBuffer,
@@ -89,52 +112,66 @@ export async function loadPdfPage(
   currentPage: number;
 }> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions?.workerSrc) {
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
+  if (typeof window !== 'undefined') {
+    if (pdfWorkerSrc) {
+      pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
+    } else if (!pdfjs.GlobalWorkerOptions?.workerSrc) {
+      pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
+    }
   }
 
-  const data =
-    source instanceof ArrayBuffer
-      ? source
-      : await readBlobAsArrayBuffer(source);
+  // pdf.js transfers (detaches) the buffer it is given, so always hand it a copy.
+  const data = new Uint8Array(
+    isArrayBuffer(source)
+      ? source.slice(0)
+      : await readBlobAsArrayBuffer(source)
+  );
   const loadingTask = pdfjs.getDocument({
     data,
     useSystemFonts: true,
   });
-  const doc = await loadingTask.promise;
-  const numPages = doc.numPages;
-  const clampedPage = Math.max(1, Math.min(pageNumber, numPages));
-  const page = await doc.getPage(clampedPage);
 
-  const viewport = page.getViewport({ scale: renderScale });
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(viewport.width);
-  canvas.height = Math.round(viewport.height);
-  const canvasContext = canvas.getContext('2d');
-  if (!canvasContext) {
-    throw new Error(
-      'Unable to create canvas 2D rendering context for PDF rendering'
-    );
+  try {
+    const doc = await loadingTask.promise;
+    const numPages = doc.numPages;
+    const clampedPage = Math.max(1, Math.min(pageNumber, numPages));
+    const page = await doc.getPage(clampedPage);
+
+    const viewport = page.getViewport({ scale: renderScale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    const canvasContext = canvas.getContext('2d');
+    if (!canvasContext) {
+      throw new Error(
+        'Unable to create canvas 2D rendering context for PDF rendering'
+      );
+    }
+
+    // Draw crisp white background behind PDF contents (handles transparent pages cleanly)
+    canvasContext.fillStyle = '#ffffff';
+    canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+
+    await page.render({
+      canvas,
+      canvasContext,
+      viewport,
+    }).promise;
+
+    const dataUrl = canvas.toDataURL('image/png');
+    return {
+      dataUrl,
+      // Report the rendered bitmap's size: the renderer draws the image at its
+      // natural pixel size, so this is what `scale` multiplies.
+      width: canvas.width,
+      height: canvas.height,
+      numPages,
+      currentPage: clampedPage,
+    };
+  } finally {
+    // Releases the document and its worker-side resources.
+    await loadingTask.destroy();
   }
-
-  // Draw crisp white background behind PDF contents (handles transparent pages cleanly)
-  canvasContext.fillStyle = '#ffffff';
-  canvasContext.fillRect(0, 0, canvas.width, canvas.height);
-
-  await page.render({
-    canvas,
-    canvasContext,
-    viewport,
-  }).promise;
-
-  const dataUrl = canvas.toDataURL('image/png');
-  return {
-    dataUrl,
-    width: Math.round(viewport.width / renderScale),
-    height: Math.round(viewport.height / renderScale),
-    numPages,
-    currentPage: clampedPage,
-  };
 }
 
 /**
@@ -150,29 +187,52 @@ export async function loadImage(
     reader.readAsDataURL(file);
   });
 
-  const dimensions = await new Promise<{ width: number; height: number }>(
-    (resolve) => {
-      if (typeof Image === 'undefined') {
-        resolve({ width: 800, height: 600 });
-        return;
-      }
-      const img = new Image();
-      let resolved = false;
-      const done = (w: number, h: number) => {
-        if (!resolved) {
-          resolved = true;
-          resolve({ width: w || 800, height: h || 600 });
-        }
-      };
-      img.onload = () => done(img.naturalWidth, img.naturalHeight);
-      img.onerror = () => done(800, 600);
-      img.src = dataUrl;
-      // In environments like jsdom where Image network loading events don't trigger, fall back quickly:
-      setTimeout(() => done(800, 600), 80);
-    }
-  );
-
+  const dimensions = await measureImage(dataUrl);
   return { dataUrl, width: dimensions.width, height: dimensions.height };
+}
+
+const FALLBACK_IMAGE_SIZE = { width: 800, height: 600 };
+
+/**
+ * Measures an image's natural size. Real browsers wait for the image to
+ * decode, however long that takes. Environments without `decode()` (e.g.
+ * jsdom, where load events never fire) fall back to a default size.
+ */
+async function measureImage(
+  src: string
+): Promise<{ width: number; height: number }> {
+  if (typeof Image === 'undefined') return FALLBACK_IMAGE_SIZE;
+  const img = new Image();
+
+  if (typeof img.decode === 'function') {
+    img.src = src;
+    try {
+      await img.decode();
+    } catch {
+      return FALLBACK_IMAGE_SIZE;
+    }
+    return {
+      width: img.naturalWidth || FALLBACK_IMAGE_SIZE.width,
+      height: img.naturalHeight || FALLBACK_IMAGE_SIZE.height,
+    };
+  }
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    const done = (w: number, h: number) => {
+      if (resolved) return;
+      resolved = true;
+      resolve({
+        width: w || FALLBACK_IMAGE_SIZE.width,
+        height: h || FALLBACK_IMAGE_SIZE.height,
+      });
+    };
+    img.onload = () => done(img.naturalWidth, img.naturalHeight);
+    img.onerror = () => done(0, 0);
+    img.src = src;
+    // Without decode() we can't rely on load events firing at all.
+    setTimeout(() => done(0, 0), 80);
+  });
 }
 
 /**

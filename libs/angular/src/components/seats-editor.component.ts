@@ -20,6 +20,7 @@ import {
 import { CommonModule } from '@angular/common';
 import {
   polygonBoundingBox,
+  safeParseFloorplan,
   type Building,
   type Floorplan,
   type FloorplanBackground,
@@ -57,6 +58,8 @@ export class SeatsEditorComponent
     viewChild.required<ElementRef<HTMLDivElement>>('container');
   readonly bgFileInputRef =
     viewChild<ElementRef<HTMLInputElement>>('bgFileInput');
+  readonly floorplanFileInputRef =
+    viewChild<ElementRef<HTMLInputElement>>('floorplanFileInput');
 
   readonly floorplan = input<Floorplan>();
   readonly tool = input<ToolType>('select');
@@ -71,6 +74,7 @@ export class SeatsEditorComponent
   readonly leftPanelCollapsed = input(false);
   readonly rightPanelCollapsed = input(false);
 
+  /** @deprecated Use `floorplanChange`; `change` shares its name with the native DOM event. */
   readonly change = output<Floorplan>();
   readonly floorplanChange = output<Floorplan>();
   readonly toolChange = output<ToolType>();
@@ -95,6 +99,10 @@ export class SeatsEditorComponent
 
   // Editions Panel Tab state
   public editionsTab: 'buildings' | 'zones' | 'tables' = 'buildings';
+
+  // Floorplan Import State
+  public isImportingFloorplan = false;
+  public floorplanImportError: string | null = null;
 
   // Floorplan Blueprint / Background State
   public isUploadingBackground = false;
@@ -399,13 +407,6 @@ export class SeatsEditorComponent
     this.ngZone.runOutsideAngular(() => {
       const floorplan = this.floorplan();
       if (changes['floorplan'] && floorplan) {
-        if (
-          typeof floorplan !== 'object' ||
-          'target' in (floorplan as any) ||
-          !('schemaVersion' in (floorplan as any))
-        ) {
-          return;
-        }
         if (floorplan !== this.lastEmittedPlan) {
           const current = editor.getFloorplan();
           if (JSON.stringify(current) !== JSON.stringify(floorplan)) {
@@ -420,15 +421,6 @@ export class SeatsEditorComponent
         editor.setTool(tool);
       }
     });
-  }
-
-  @HostListener('change', ['$event'])
-  public handleNativeChange(e: Event | unknown): void {
-    // Prevent internal DOM input/select/range change events from bubbling out
-    // of the component and colliding with Angular's (change) output.
-    if (e && typeof (e as any).stopPropagation === 'function') {
-      (e as Event).stopPropagation();
-    }
   }
 
   @HostListener('keydown', ['$event'])
@@ -562,6 +554,83 @@ export class SeatsEditorComponent
   public loadFloorplan(plan: Floorplan): void {
     this.editor?.loadFloorplan(plan);
     this.cdr.markForCheck();
+  }
+
+  // -------------------------------------------------------------
+  // Floorplan Import
+  // -------------------------------------------------------------
+  public triggerFloorplanImport(): void {
+    this.floorplanFileInputRef()?.nativeElement.click();
+  }
+
+  public async onFloorplanFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    // Reset so selecting the same file again still fires `change`
+    input.value = '';
+    if (file) {
+      await this.importFloorplanFile(file);
+    }
+  }
+
+  /**
+   * Reads a floorplan JSON file, validates it, and replaces the current plan.
+   * Returns true when the plan was imported. Invalid files leave the current
+   * plan untouched and set `floorplanImportError`.
+   */
+  public async importFloorplanFile(file: File): Promise<boolean> {
+    if (!this.editor) return false;
+    this.isImportingFloorplan = true;
+    this.floorplanImportError = null;
+    this.cdr.markForCheck();
+
+    try {
+      let raw: unknown;
+      try {
+        raw = JSON.parse(await readFileAsText(file));
+      } catch {
+        this.floorplanImportError = `"${file.name}" is not valid JSON.`;
+        return false;
+      }
+
+      const parsed = safeParseFloorplan(raw);
+      if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        const where = issue?.path.length ? ` at "${issue.path.join('.')}"` : '';
+        this.floorplanImportError = `"${file.name}" is not a valid floorplan${where}: ${issue?.message ?? 'unknown error'}`;
+        return false;
+      }
+
+      const current = this.editor.getFloorplan();
+      const hasContent = current.buildings.length > 0 || !!current.background;
+      if (
+        hasContent &&
+        !this.confirmReplace(
+          `Replace the current floorplan with "${file.name}"? Undo history will be cleared.`
+        )
+      ) {
+        return false;
+      }
+
+      this.editor.loadFloorplan(parsed.data as Floorplan);
+      // The imported plan owns its own background; drop cached upload state
+      this.cachedPdfBuffer = null;
+      this.backgroundDimensions = null;
+      this.backgroundUploadError = null;
+      this.clearSelection();
+      this.editor.resetZoom();
+      return true;
+    } finally {
+      this.isImportingFloorplan = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** Overridable for tests and embedding apps that use a custom dialog. */
+  protected confirmReplace(message: string): boolean {
+    return typeof window !== 'undefined' && typeof window.confirm === 'function'
+      ? window.confirm(message)
+      : true;
   }
 
   public switchEditionsTab(
@@ -701,24 +770,44 @@ export class SeatsEditorComponent
     }
   }
 
-  public updateBackground(updates: Partial<FloorplanBackground>): void {
-    this.editor?.updateBackground(updates);
+  public updateBackground(
+    updates: Partial<FloorplanBackground>,
+    options?: { merge?: boolean }
+  ): void {
+    this.editor?.updateBackground(updates, options);
     this.cdr.markForCheck();
   }
 
+  // Slider / number-field handlers fire on every input event; merge them so
+  // one drag or edit becomes a single undo step.
   public setBackgroundOpacity(opacityPercent: number): void {
     const opacity = Math.max(0, Math.min(1, opacityPercent / 100));
-    this.updateBackground({ opacity });
+    this.updateBackground({ opacity }, { merge: true });
   }
 
   public setBackgroundScale(scale: number): void {
     if (scale > 0) {
-      this.updateBackground({ scale });
+      this.updateBackground({ scale }, { merge: true });
     }
   }
 
+  // Scale slider works in log10 space so it covers 0.1x..~31.6x while
+  // staying precise at small values.
+  public readonly BACKGROUND_SCALE_LOG_MIN = -1;
+  public readonly BACKGROUND_SCALE_LOG_MAX = 1.5;
+
+  public get backgroundScaleSliderValue(): number {
+    return Math.log10(this.currentBackground?.scale ?? 1);
+  }
+
+  public setBackgroundScaleFromSlider(logValue: number): void {
+    const scale = Math.pow(10, logValue);
+    // Round to 3 significant digits so the number field stays readable
+    this.setBackgroundScale(Number(scale.toPrecision(3)));
+  }
+
   public setBackgroundPosition(x: number, y: number): void {
-    this.updateBackground({ position: { x, y } });
+    this.updateBackground({ position: { x, y } }, { merge: true });
   }
 
   public toggleBackgroundVisibility(): void {
@@ -1415,4 +1504,15 @@ export class SeatsEditorComponent
   ngOnDestroy(): void {
     this.editor?.destroy();
   }
+}
+
+/** Reads a File as text, using FileReader where Blob.text() is unavailable. */
+function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === 'function') return file.text();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsText(file);
+  });
 }

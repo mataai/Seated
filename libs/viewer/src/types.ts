@@ -51,6 +51,7 @@ export interface ViewerOptions {
   tolerance?: number;
   ariaLabel?: string;
   enableKeyboardNavigation?: boolean;
+  /** Render the floorplan's background image. Defaults to true. */
   showBackground?: boolean;
 }
 

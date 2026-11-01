@@ -4,6 +4,7 @@ import {
   isImageFile,
   isPdfFile,
   loadFloorplanBackgroundFromFile,
+  loadPdfPage,
 } from '../src/background/background-loader';
 import { createEditor } from '../src/editor';
 import { SAMPLE_FLOORPLAN } from '@open-seats/core';
@@ -100,6 +101,24 @@ describe('BackgroundLoader', () => {
     });
   });
 
+  describe('loadPdfPage', () => {
+    it('can render from the same ArrayBuffer repeatedly without detaching it', async () => {
+      const minimalPdf =
+        '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 100 100]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000101 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n168\n%%EOF';
+      const buffer = new TextEncoder().encode(minimalPdf).buffer as ArrayBuffer;
+      const byteLength = buffer.byteLength;
+
+      const first = await loadPdfPage(buffer, 1, 2.0);
+      expect(buffer.byteLength).toBe(byteLength);
+      // 100pt MediaBox rendered at 2x: dimensions match the bitmap the renderer draws
+      expect(first.width).toBe(200);
+      expect(first.height).toBe(200);
+      const second = await loadPdfPage(buffer, 1);
+      expect(second.numPages).toBe(first.numPages);
+      expect(buffer.byteLength).toBe(byteLength);
+    });
+  });
+
   describe('Editor background management & undo/redo', () => {
     it('sets, updates, and retrieves background on EditorInstance', () => {
       const container = document.createElement('div');
@@ -138,8 +157,69 @@ describe('BackgroundLoader', () => {
     });
   });
 
+  describe('Editor background update merging', () => {
+    const bg = {
+      src: 'data:image/png;base64,sample',
+      opacity: 0.5,
+      locked: false,
+      visible: true,
+    };
+
+    it('merges consecutive merge:true updates of the same field into one undo step', () => {
+      const editor = createEditor(document.createElement('div'), {
+        floorplan: structuredClone(SAMPLE_FLOORPLAN),
+      });
+      editor.setBackground(bg);
+      for (let i = 1; i <= 10; i++) {
+        editor.updateBackground({ opacity: i / 10 }, { merge: true });
+      }
+      expect(editor.getBackground()?.opacity).toBe(1);
+      editor.undo();
+      expect(editor.getBackground()?.opacity).toBe(0.5);
+      editor.redo();
+      expect(editor.getBackground()?.opacity).toBe(1);
+    });
+
+    it('does not merge updates without merge:true or of different fields', () => {
+      const editor = createEditor(document.createElement('div'), {
+        floorplan: structuredClone(SAMPLE_FLOORPLAN),
+      });
+      editor.setBackground(bg);
+      editor.updateBackground({ opacity: 0.6 });
+      editor.updateBackground({ opacity: 0.7 });
+      editor.updateBackground({ scale: 2 }, { merge: true });
+      editor.undo();
+      expect(editor.getBackground()?.scale).toBeUndefined();
+      expect(editor.getBackground()?.opacity).toBe(0.7);
+      editor.undo();
+      expect(editor.getBackground()?.opacity).toBe(0.6);
+    });
+
+    it('records a background drag as an undoable command without mutating history', () => {
+      const editor = createEditor(document.createElement('div'), {
+        floorplan: structuredClone(SAMPLE_FLOORPLAN),
+      });
+      editor.setBackground(bg);
+      editor.updateBackground({ opacity: 0.8 });
+      const renderer = (editor as any).renderer;
+      renderer.options.onBackgroundChange({
+        ...editor.getBackground(),
+        position: { x: 40, y: 30 },
+      });
+      expect(editor.getBackground()?.position).toEqual({ x: 40, y: 30 });
+
+      editor.undo();
+      expect(editor.getBackground()?.position).toBeUndefined();
+      editor.undo();
+      editor.redo();
+      // Redoing the opacity change must not resurrect the dragged position
+      expect(editor.getBackground()?.opacity).toBe(0.8);
+      expect(editor.getBackground()?.position).toBeUndefined();
+    });
+  });
+
   describe('Viewer background visibility check', () => {
-    it('does not render background in viewer by default (editor-only background)', () => {
+    it('renders background in viewer by default', () => {
       const container = document.createElement('div');
       const planWithBg = structuredClone(SAMPLE_FLOORPLAN);
       planWithBg.background = {
@@ -155,4 +235,3 @@ describe('BackgroundLoader', () => {
     });
   });
 });
-

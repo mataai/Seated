@@ -305,19 +305,21 @@ describe('Editor (@open-seats/editor)', () => {
   it('supports zoom and pan controls in edit mode and preview mode', () => {
     editor = createEditor(container, { floorplan: initialPlan });
 
-    const initialScale = editor.getScale();
-    expect(initialScale).toBe(1);
+    // Default view fits the whole plan (never above 1x)
+    const fitted = editor.getScale();
+    expect(fitted).toBeGreaterThan(0);
+    expect(fitted).toBeLessThanOrEqual(1);
 
     editor.zoomIn(1.5);
-    expect(editor.getScale()).toBe(1.5);
+    expect(editor.getScale()).toBeCloseTo(fitted * 1.5);
 
     editor.zoomOut(1.5);
-    expect(editor.getScale()).toBeCloseTo(1);
+    expect(editor.getScale()).toBeCloseTo(fitted);
 
     editor.zoomIn(2);
-    expect(editor.getScale()).toBe(2);
+    expect(editor.getScale()).toBeCloseTo(fitted * 2);
     editor.resetZoom();
-    expect(editor.getScale()).toBe(1);
+    expect(editor.getScale()).toBeCloseTo(fitted);
 
     // Pan
     editor.panTo(50, 60);
@@ -327,11 +329,12 @@ describe('Editor (@open-seats/editor)', () => {
     editor.togglePreview(true);
     expect(editor.isPreview()).toBe(true);
 
+    const previewFitted = editor.getScale();
     editor.zoomIn(1.4);
-    expect(editor.getScale()).toBe(1.4);
+    expect(editor.getScale()).toBeCloseTo(previewFitted * 1.4);
 
     editor.resetZoom();
-    expect(editor.getScale()).toBe(1);
+    expect(editor.getScale()).toBeCloseTo(previewFitted);
 
     editor.togglePreview(false);
     expect(editor.isPreview()).toBe(false);
@@ -417,6 +420,121 @@ describe('Editor (@open-seats/editor)', () => {
     // Undo restores to 8
     expect(editor.undo()).toBe(true);
     expect(editor.getFloorplan().buildings[0].rows[0].seats.length).toBe(8);
+  });
+
+  describe('setRowSeatCount re-fits spacing to the table length', () => {
+    const makeRow = (side: 'one' | 'both') => {
+      editor = createEditor(container, {
+        floorplan: initialPlan,
+        rules: { enforce: false },
+      });
+      return editor.createRow(
+        'b-1',
+        { x: 100, y: 100 },
+        side === 'both' ? 6 : 3,
+        {
+          side,
+          seatSpacing: 40,
+          seatRadius: 10,
+          tableWidth: 20,
+          tableLength: 120,
+        }
+      )!;
+    };
+    const getRow = (id: string) =>
+      editor!
+        .getFloorplan()
+        .buildings.flatMap((b) => b.rows)
+        .find((r) => r.id === id)!;
+
+    it('spreads more seats over the same table length', () => {
+      const row = makeRow('one');
+      expect(editor!.setRowSeatCount(row.id, 5)).toBe(true);
+      const updated = getRow(row.id);
+      // (120 - 2*10) / (5 - 1) = 25
+      expect(updated.seatSpacing).toBe(25);
+      expect(updated.tableLength).toBe(120);
+    });
+
+    it('widens spacing when seats are removed', () => {
+      const row = makeRow('one');
+      editor!.setRowSeatCount(row.id, 2);
+      expect(getRow(row.id).seatSpacing).toBe(100);
+    });
+
+    it('counts slots per side for double-sided tables', () => {
+      const row = makeRow('both');
+      editor!.setRowSeatCount(row.id, 10); // 5 slots per side
+      expect(getRow(row.id).seatSpacing).toBe(25);
+    });
+
+    it('never packs seats closer than touching; the table grows instead', () => {
+      const row = makeRow('one');
+      editor!.setRowSeatCount(row.id, 10);
+      expect(getRow(row.id).seatSpacing).toBe(20);
+    });
+
+    it('pins the natural length for rows without tableLength', () => {
+      const row = makeRow('one');
+      const plan = editor!.getFloorplan();
+      const r = plan.buildings
+        .flatMap((b) => b.rows)
+        .find((x) => x.id === row.id)!;
+      delete r.tableLength;
+      r.seatSpacing = 40; // natural length = 2*40 + 2*10 = 100
+      editor!.loadFloorplan(plan);
+      editor!.setRowSeatCount(row.id, 5);
+      expect(getRow(row.id).seatSpacing).toBe(20);
+      expect(getRow(row.id).tableLength).toBe(100);
+    });
+
+    it('restores spacing and length on undo', () => {
+      const row = makeRow('one');
+      editor!.setRowSeatCount(row.id, 5);
+      editor!.undo();
+      const restored = getRow(row.id);
+      expect(restored.seats.length).toBe(3);
+      expect(restored.seatSpacing).toBe(40);
+      expect(restored.tableLength).toBe(120);
+    });
+  });
+
+  it('labels seats <building>-<row>-<n> and relabels on building/row rename', () => {
+    editor = createEditor(container, {
+      floorplan: initialPlan,
+      rules: { enforce: false },
+    });
+    const building = editor
+      .getFloorplan()
+      .buildings.find((b) => b.id === 'b-1')!;
+    const row = editor.createRow('b-1', { x: 100, y: 100 }, 4, {
+      side: 'both',
+    })!;
+    const labelsOf = () =>
+      editor!
+        .getFloorplan()
+        .buildings.flatMap((b) => b.rows)
+        .find((r) => r.id === row.id)!
+        .seats.map((s) => s.label)
+        .sort();
+    const prefix = `${building.label}-${row.label}`;
+    expect(labelsOf()).toEqual(
+      [1, 2, 3, 4].map((n) => `${prefix}-${n}`).sort()
+    );
+
+    editor.updateNodeLabel('b-1', 'North');
+    expect(labelsOf()).toEqual(
+      [1, 2, 3, 4].map((n) => `North-${row.label}-${n}`).sort()
+    );
+
+    editor.updateNodeLabel(row.id, 'Z');
+    expect(labelsOf()).toEqual([1, 2, 3, 4].map((n) => `North-Z-${n}`).sort());
+
+    editor.undo();
+    editor.undo();
+    expect(labelsOf()).toEqual(
+      [1, 2, 3, 4].map((n) => `${prefix}-${n}`).sort()
+    );
   });
 
   it('adjusts size of shapes via setShapeDimensions', () => {

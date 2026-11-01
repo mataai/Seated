@@ -46,6 +46,8 @@ type EditableNode =
   | { kind: 'zone'; node: Zone; parent: Building }
   | { kind: 'row'; node: Row; parent: Building };
 
+const BACKGROUND_MERGE_WINDOW_MS = 1000;
+
 export class Editor implements EditorInstance {
   private container: HTMLElement;
   private floorplan: Floorplan;
@@ -75,6 +77,12 @@ export class Editor implements EditorInstance {
 
   private batchDepth = 0;
   private changePending = false;
+  private lastBackgroundUpdate?: {
+    command: Command;
+    keys: string;
+    at: number;
+    setNewBackground: (bg: FloorplanBackground) => void;
+  };
 
   private renderer?: Renderer;
   private embeddedViewer?: ViewerInstance;
@@ -93,7 +101,7 @@ export class Editor implements EditorInstance {
 
     // parseFloorplan validates the input and returns a fresh copy
     this.floorplan = options.floorplan
-      ? cloneFloorplan(parseFloorplan(options.floorplan))
+      ? parseFloorplan(options.floorplan)
       : {
           schemaVersion: 1,
           dimensions: { width: 1200, height: 800 },
@@ -153,8 +161,8 @@ export class Editor implements EditorInstance {
       },
       showBackground: true,
       onBackgroundChange: (bg) => {
-        this.floorplan.background = bg;
-        this.emitChange();
+        // Background drag: record it as an undoable command.
+        this.updateBackground({ position: bg.position });
       },
     });
   }
@@ -341,7 +349,7 @@ export class Editor implements EditorInstance {
 
   public loadFloorplan(floorplan: Floorplan): void {
     // Validate first so an invalid plan leaves the editor untouched
-    const parsed = cloneFloorplan(parseFloorplan(floorplan));
+    const parsed = parseFloorplan(floorplan);
     if (this.isDrawingBuilding) {
       this.cancelBuildingCreation();
     }
@@ -826,7 +834,7 @@ export class Editor implements EditorInstance {
           id: `__draft_s_${i}a`,
           index: i,
           side: 'a',
-          label: `${i + 1}a`,
+          label: `${2 * i + 1}`,
         });
         created++;
         if (created < count) {
@@ -834,7 +842,7 @@ export class Editor implements EditorInstance {
             id: `__draft_s_${i}b`,
             index: i,
             side: 'b',
-            label: `${i + 1}b`,
+            label: `${2 * i + 2}`,
           });
           created++;
         }
@@ -1068,22 +1076,78 @@ export class Editor implements EditorInstance {
       : undefined;
   }
 
-  public updateBackground(updates: Partial<FloorplanBackground>): void {
-    if (!this.floorplan.background) return;
-    const oldBg = { ...this.floorplan.background };
-    const newBg = { ...this.floorplan.background, ...updates };
+  /**
+   * Applies `updates` to the background as an undoable command.
+   *
+   * With `merge: true`, consecutive updates of the same fields made within a
+   * short window (e.g. dragging a slider) collapse into a single undo step.
+   */
+  public updateBackground(
+    updates: Partial<FloorplanBackground>,
+    options?: { merge?: boolean }
+  ): void {
+    const current = this.floorplan.background;
+    if (!current) return;
+
+    const keys = Object.keys(updates).sort().join(',');
+    const now = Date.now();
+    const last = this.lastBackgroundUpdate;
+    if (
+      options?.merge &&
+      last &&
+      last.keys === keys &&
+      now - last.at < BACKGROUND_MERGE_WINDOW_MS &&
+      this.commandStack.peek() === last.command &&
+      !this.commandStack.canRedo()
+    ) {
+      last.setNewBackground({ ...current, ...updates });
+      last.at = now;
+      last.command.execute();
+      this.emitBackgroundChange();
+      return;
+    }
+
+    const oldBg = { ...current };
+    let newBg: FloorplanBackground = { ...current, ...updates };
     const command: Command = {
       name: 'Update Background',
       execute: () => {
-        this.floorplan.background = newBg;
+        this.floorplan.background = { ...newBg };
       },
       undo: () => {
-        this.floorplan.background = oldBg;
+        this.floorplan.background = { ...oldBg };
       },
     };
 
     this.commandStack.execute(command);
-    this.emitChange();
+    this.lastBackgroundUpdate = options?.merge
+      ? {
+          command,
+          keys,
+          at: now,
+          setNewBackground: (bg) => {
+            newBg = bg;
+          },
+        }
+      : undefined;
+    this.emitBackgroundChange();
+  }
+
+  /**
+   * Like emitChange, but only re-renders the background layer: background
+   * edits don't affect the scene or layout violations.
+   */
+  private emitBackgroundChange(): void {
+    if (this.batchDepth > 0) {
+      this.changePending = true;
+      return;
+    }
+    if (this.renderer?.refreshBackground) {
+      this.renderer.refreshBackground(this.floorplan);
+      this.emitter.emit('change', this.getFloorplan());
+    } else {
+      this.emitChange();
+    }
   }
 
   public async loadBackgroundFromFile(
@@ -1570,13 +1634,17 @@ export class Editor implements EditorInstance {
     for (const b of this.floorplan.buildings) {
       if (b.id === nodeId) {
         const oldLabel = b.label;
+        const oldRows = b.rows;
+        const newRows = NumberingService.renumberBuildingSeats({ ...b, label });
         this.commandStack.execute({
           name: `Rename Building to ${label}`,
           execute: () => {
             b.label = label;
+            b.rows = newRows;
           },
           undo: () => {
             b.label = oldLabel;
+            b.rows = oldRows;
           },
         });
         this.emitChange();
@@ -1605,15 +1673,20 @@ export class Editor implements EditorInstance {
       const row = (b.rows ?? []).find((r) => r.id === nodeId);
       if (row) {
         const oldLabel = row.label;
+        const oldSeats = row.seats;
+        const newSeats = NumberingService.renumberRowSeats(
+          { ...row, label },
+          b.label
+        );
         this.commandStack.execute({
           name: `Rename Row to ${label}`,
           execute: () => {
             row.label = label;
-            row.seats = NumberingService.renumberRowSeats(row);
+            row.seats = newSeats;
           },
           undo: () => {
             row.label = oldLabel;
-            row.seats = NumberingService.renumberRowSeats(row);
+            row.seats = oldSeats;
           },
         });
         this.emitChange();

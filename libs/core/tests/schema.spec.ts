@@ -134,23 +134,23 @@ describe('Schema validation', () => {
     expect(parsed.success).toBe(false);
   });
 
-  it('parses empty object with default schemaVersion, dimensions, and buildings', () => {
-    const parsed = parseFloorplan({});
-    expect(parsed.schemaVersion).toBe(1);
-    expect(parsed.dimensions).toEqual({ width: 1200, height: 800 });
-    expect(parsed.buildings).toEqual([]);
+  it('rejects null, undefined, and incomplete objects', () => {
+    expect(safeParseFloorplan(null).success).toBe(false);
+    expect(safeParseFloorplan(undefined).success).toBe(false);
+    expect(safeParseFloorplan({}).success).toBe(false);
+    expect(() => parseFloorplan({})).toThrow();
   });
 
-  it('parses floorplan starting with only background blueprint', () => {
+  it('parses a floorplan with a background blueprint', () => {
     const parsed = parseFloorplan({
+      schemaVersion: 1,
+      dimensions: { width: 1200, height: 800 },
+      buildings: [],
       background: {
         src: 'data:image/png;base64,test',
         opacity: 0.6,
       },
     });
-    expect(parsed.schemaVersion).toBe(1);
-    expect(parsed.dimensions).toEqual({ width: 1200, height: 800 });
-    expect(parsed.buildings).toEqual([]);
     expect(parsed.background?.src).toBe('data:image/png;base64,test');
     expect(parsed.background?.opacity).toBe(0.6);
   });

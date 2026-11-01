@@ -101,14 +101,6 @@ export class AppComponent {
   }
 
   public onFloorplanChanged(plan: Floorplan): void {
-    if (
-      !plan ||
-      typeof plan !== 'object' ||
-      'target' in (plan as any) ||
-      !('schemaVersion' in plan)
-    ) {
-      return;
-    }
     this.floorplan = plan;
     this.addLog('editor', 'Floorplan modified');
     this.cdr.markForCheck();

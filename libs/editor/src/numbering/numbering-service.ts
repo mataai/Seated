@@ -1,4 +1,4 @@
-import type { Row, Seat } from '@open-seats/core';
+import type { Building, Row, Seat } from '@open-seats/core';
 
 export class NumberingService {
   /**
@@ -15,25 +15,47 @@ export class NumberingService {
   }
 
   /**
-   * Renumbers seats along a row while strictly preserving existing seat IDs.
-   * Format: e.g. "A-1", "A-2"... or "A-1a", "A-1b" if both sides.
+   * Seat number within its row. One-sided rows count 1, 2, 3...
+   * Double-sided rows put odd numbers on side "a" and even numbers on side
+   * "b", so the seats facing each other at slot `i` are 2i+1 and 2i+2.
    */
-  public static renumberRowSeats(row: Row): Seat[] {
-    const rowPrefix = row.label || 'Row';
+  public static seatNumber(row: Pick<Row, 'side'>, seat: Seat): number {
+    if (row.side !== 'both') return seat.index + 1;
+    return seat.side === 'b' ? 2 * seat.index + 2 : 2 * seat.index + 1;
+  }
 
-    return row.seats.map((seat) => {
-      let seatLabel = '';
-      if (row.side === 'both') {
-        seatLabel = `${rowPrefix}-${seat.index + 1}${seat.side}`;
-      } else {
-        seatLabel = `${rowPrefix}-${seat.index + 1}`;
-      }
+  /** Formats a seat label as `<building>-<row>-<number>`. */
+  public static seatLabel(
+    buildingLabel: string | undefined,
+    rowLabel: string | undefined,
+    seatNumber: number
+  ): string {
+    return [buildingLabel, rowLabel || 'Row', String(seatNumber)]
+      .filter((part) => part !== undefined && part !== '')
+      .join('-');
+  }
 
-      return {
-        ...seat,
-        label: seatLabel,
-      };
-    });
+  /**
+   * Renumbers seats along a row while strictly preserving existing seat IDs.
+   * Format: `<building>-<row>-<number>`, e.g. "Main Hall-A-3".
+   */
+  public static renumberRowSeats(row: Row, buildingLabel?: string): Seat[] {
+    return row.seats.map((seat) => ({
+      ...seat,
+      label: NumberingService.seatLabel(
+        buildingLabel,
+        row.label,
+        NumberingService.seatNumber(row, seat)
+      ),
+    }));
+  }
+
+  /** Renumbers every row of a building (e.g. after a rename). */
+  public static renumberBuildingSeats(building: Building): Row[] {
+    return building.rows.map((row) => ({
+      ...row,
+      seats: NumberingService.renumberRowSeats(row, building.label),
+    }));
   }
 
   /**

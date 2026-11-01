@@ -28,6 +28,10 @@ const DEFAULT_HOVER_STYLE: Required<HoverStyle> = {
   strokeWidth: 2,
 };
 
+const FIT_PADDING_PX = 24;
+const FIT_MIN_SCALE = 0.1;
+const FIT_MAX_SCALE = 1;
+
 export class KonvaRenderer implements Renderer {
   private container: HTMLElement;
   private stage: Konva.Stage;
@@ -60,6 +64,11 @@ export class KonvaRenderer implements Renderer {
   private backgroundImage: HTMLImageElement | null = null;
   private backgroundSrc: string | null = null;
   private backgroundToken = 0;
+  /**
+   * True while the view is in its default "fit everything" state. Any manual
+   * zoom or pan turns it off; resetZoom()/fitToContent() turn it back on.
+   */
+  private autoFit = true;
 
   // Touch pinch zoom state
   private lastTouchDist = 0;
@@ -117,6 +126,7 @@ export class KonvaRenderer implements Renderer {
           if (width > 0 && height > 0) {
             this.stage.width(width);
             this.stage.height(height);
+            if (this.autoFit) this.applyFit();
             this.stage.batchDraw();
           }
         }
@@ -129,6 +139,7 @@ export class KonvaRenderer implements Renderer {
     // Wheel zoom centered on pointer
     this.stage.on('wheel', (e) => {
       e.evt.preventDefault();
+      this.autoFit = false;
       const scaleBy = 1.08;
       const oldScale = this.stage.scaleX();
       const pointer = this.stage.getPointerPosition();
@@ -157,6 +168,7 @@ export class KonvaRenderer implements Renderer {
       const touch2 = e.evt.touches[1];
 
       if (touch1 && touch2) {
+        this.autoFit = false;
         if (this.stage.isDragging()) {
           this.stage.stopDrag();
         }
@@ -196,6 +208,10 @@ export class KonvaRenderer implements Renderer {
         this.lastTouchDist = dist;
         this.stage.batchDraw();
       }
+    });
+
+    this.stage.on('dragstart', (e) => {
+      if (e.target === this.stage) this.autoFit = false;
     });
 
     this.stage.on('touchend', () => {
@@ -239,8 +255,16 @@ export class KonvaRenderer implements Renderer {
     this.renderBackground(floorplan);
     this.renderScene(floorplan);
 
+    if (this.autoFit) this.applyFit();
     this.stage.batchDraw();
     this.options.onReady?.();
+  }
+
+  public refreshBackground(floorplan: Floorplan): void {
+    this.floorplan = floorplan;
+    this.backgroundLayer.destroyChildren();
+    this.renderBackground(floorplan);
+    this.backgroundLayer.batchDraw();
   }
 
   public getFloorplan(): Floorplan | null {
@@ -248,9 +272,11 @@ export class KonvaRenderer implements Renderer {
   }
 
   private renderBackground(floorplan: Floorplan): void {
+    // Bump the token first so any in-flight image load is invalidated, even
+    // when the background is now hidden or disabled.
+    const token = ++this.backgroundToken;
     if (this.options.showBackground === false) return;
     if (floorplan.background?.visible === false) return;
-    const token = ++this.backgroundToken;
     if (!floorplan.background?.src) return;
 
     const bg = floorplan.background;
@@ -269,18 +295,25 @@ export class KonvaRenderer implements Renderer {
 
       if (!isLocked) {
         konvaImage.on('dragend', () => {
-          if (floorplan.background) {
-            floorplan.background.position = {
+          // Don't mutate the floorplan here: report the new position and let
+          // the owner (e.g. the editor) apply it through its command stack.
+          this.options.onBackgroundChange?.({
+            ...bg,
+            position: {
               x: Math.round(konvaImage.x()),
               y: Math.round(konvaImage.y()),
-            };
-            this.options.onBackgroundChange?.(floorplan.background);
-          }
+            },
+          });
         });
       }
 
       this.backgroundLayer.add(konvaImage);
-      this.backgroundLayer.batchDraw();
+      if (this.autoFit) {
+        this.applyFit();
+        this.stage.batchDraw();
+      } else {
+        this.backgroundLayer.batchDraw();
+      }
     };
 
     const cached = this.backgroundImage;
@@ -860,6 +893,7 @@ export class KonvaRenderer implements Renderer {
   public zoomIn(factor = 1.2): void {
     const oldScale = this.stage.scaleX();
     const newScale = Math.min(oldScale * factor, 10);
+    this.autoFit = false;
     this.stage.scale({ x: newScale, y: newScale });
     this.stage.batchDraw();
   }
@@ -867,22 +901,83 @@ export class KonvaRenderer implements Renderer {
   public zoomOut(factor = 1.2): void {
     const oldScale = this.stage.scaleX();
     const newScale = Math.max(oldScale / factor, 0.1);
+    this.autoFit = false;
     this.stage.scale({ x: newScale, y: newScale });
     this.stage.batchDraw();
   }
 
+  /** Returns to the default view: everything in the floorplan fits on screen. */
   public resetZoom(): void {
-    this.stage.scale({ x: 1, y: 1 });
-    this.stage.position({ x: 0, y: 0 });
+    this.fitToContent();
+  }
+
+  /**
+   * Zooms and centers the view so every building, zone, row and the visible
+   * background fit inside the stage. Never zooms in past 1x, so small plans
+   * aren't blown up. The view keeps re-fitting on resize and reload until the
+   * user zooms or pans.
+   */
+  public fitToContent(): void {
+    this.autoFit = true;
+    this.applyFit();
     this.stage.batchDraw();
   }
 
+  private applyFit(): void {
+    const bounds = this.contentBounds();
+    const stageW = this.stage.width();
+    const stageH = this.stage.height();
+    const pad = FIT_PADDING_PX;
+    const availW = Math.max(1, stageW - 2 * pad);
+    const availH = Math.max(1, stageH - 2 * pad);
+
+    const fitScale = Math.min(availW / bounds.width, availH / bounds.height);
+    const scale = Math.max(FIT_MIN_SCALE, Math.min(fitScale, FIT_MAX_SCALE));
+
+    this.stage.scale({ x: scale, y: scale });
+    this.stage.position({
+      x: (stageW - bounds.width * scale) / 2 - bounds.x * scale,
+      y: (stageH - bounds.height * scale) / 2 - bounds.y * scale,
+    });
+  }
+
+  /** World-space bounding box of everything drawn (scene + background). */
+  private contentBounds(): {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const layer of [this.sceneLayer, this.backgroundLayer]) {
+      if (layer.getChildren().length === 0) continue;
+      const r = layer.getClientRect({ relativeTo: this.stage });
+      if (!(r.width > 0 && r.height > 0)) continue;
+      minX = Math.min(minX, r.x);
+      minY = Math.min(minY, r.y);
+      maxX = Math.max(maxX, r.x + r.width);
+      maxY = Math.max(maxY, r.y + r.height);
+    }
+
+    if (!Number.isFinite(minX)) {
+      // Nothing drawn yet: frame the floorplan's declared canvas.
+      const dims = this.floorplan?.dimensions ?? { width: 800, height: 600 };
+      return { x: 0, y: 0, width: dims.width || 1, height: dims.height || 1 };
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
   public panTo(x: number, y: number): void {
+    this.autoFit = false;
     this.stage.position({ x, y });
     this.stage.batchDraw();
   }
 
   public panBy(dx: number, dy: number): void {
+    this.autoFit = false;
     const current = this.stage.position();
     this.stage.position({ x: current.x + dx, y: current.y + dy });
     this.stage.batchDraw();

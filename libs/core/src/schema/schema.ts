@@ -118,13 +118,10 @@ export const BuildingSchema = z
 
 export const FloorplanSchema = z
   .object({
-    schemaVersion: z.literal(1).default(1),
-    dimensions: FloorplanDimensionsSchema.default({
-      width: 1200,
-      height: 800,
-    }),
+    schemaVersion: z.literal(1),
+    dimensions: FloorplanDimensionsSchema,
     background: FloorplanBackgroundSchema.optional(),
-    buildings: z.array(BuildingSchema).default([]),
+    buildings: z.array(BuildingSchema),
   })
   .passthrough();
 
@@ -134,30 +131,14 @@ export type InferredZone = z.infer<typeof ZoneSchema>;
 export type InferredRow = z.infer<typeof RowSchema>;
 export type InferredSeat = z.infer<typeof SeatSchema>;
 
-export function parseFloorplan(input: unknown = {}): IFloorplan {
-  if (
-    input &&
-    typeof input === 'object' &&
-    ('target' in input || 'preventDefault' in input)
-  ) {
-    throw new Error(
-      'Invalid input to parseFloorplan: expected Floorplan, received DOM Event'
-    );
-  }
-  return FloorplanSchema.parse(input ?? {}) as IFloorplan;
+export function parseFloorplan(input: unknown): IFloorplan {
+  return FloorplanSchema.parse(input) as IFloorplan;
 }
 
 export function safeParseFloorplan(
-  input: unknown = {}
+  input: unknown
 ): ReturnType<typeof FloorplanSchema.safeParse> {
-  if (
-    input &&
-    typeof input === 'object' &&
-    ('target' in input || 'preventDefault' in input)
-  ) {
-    return FloorplanSchema.safeParse(null);
-  }
-  return FloorplanSchema.safeParse(input ?? {});
+  return FloorplanSchema.safeParse(input);
 }
 
 /**
@@ -176,4 +157,3 @@ export function cloneFloorplan<T = IFloorplan>(obj: T): T {
     );
   }
 }
-

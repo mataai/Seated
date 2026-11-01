@@ -1334,6 +1334,17 @@
     font-weight: 700;
     color: #818cf8;
   }
+
+  .scale-input {
+    width: 52px;
+    padding: 1px 4px;
+    font: inherit;
+    color: inherit;
+    text-align: right;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+  }
 }
 
 .form-range {

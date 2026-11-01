@@ -65,13 +65,20 @@ export interface RendererOptions {
     target?: unknown
   ) => void;
   onStageMouseMove?: (pos: Vec2, evt: MouseEvent) => void;
+  /** Render `floorplan.background`. Defaults to true. */
   showBackground?: boolean;
+  /**
+   * Called when the user drags an unlocked background. Receives a new
+   * background object; the renderer does not mutate the floorplan itself.
+   */
   onBackgroundChange?: (bg: FloorplanBackground) => void;
   onReady?: () => void;
 }
 
 export interface Renderer {
   load(floorplan: Floorplan): void;
+  /** Re-render only the background layer for the given floorplan. */
+  refreshBackground?(floorplan: Floorplan): void;
   getFloorplan(): Floorplan | null;
   setStatus(seatId: string, statusKey: string): void;
   setStatuses(statuses: Record<string, string>): void;
@@ -108,7 +115,10 @@ export interface Renderer {
   getPointerWorldPosition(): Vec2 | null;
   zoomIn(factor?: number): void;
   zoomOut(factor?: number): void;
+  /** Returns to the default view, fitting all floorplan content. */
   resetZoom(): void;
+  /** Zooms and centers so all floorplan content fits in view. */
+  fitToContent?(): void;
   panTo(x: number, y: number): void;
   panBy(dx: number, dy: number): void;
   getPosition(): Vec2;
