@@ -466,14 +466,11 @@ export class Editor implements EditorInstance {
     return [...this.draftBuildingPoints];
   }
 
-  public startRowCreation(
-    options?: RowCreationOptions,
-    buildingId?: string
-  ): void {
+  public startRowCreation(options?: RowCreationOptions): void {
     this.isDrawingRow = true;
     this.draftRowPoints = [];
     this.draftRowOpts = options;
-    this.draftRowBuildingId = buildingId;
+    this.draftRowBuildingId = undefined;
     this.activeTool = 'row';
     this.clearSelection();
     this.renderer?.setDraggableNodes(false);
@@ -509,6 +506,13 @@ export class Editor implements EditorInstance {
     return [...this.draftRowPoints];
   }
 
+  private resetDraftRow(): void {
+    this.draftRowPoints = [];
+    this.draftRowBuildingId = undefined;
+    this.renderer?.clearDraftPolygon();
+    this.emitter.emit('rowCreationPointsChange', []);
+  }
+
   private handleStageClick(
     worldPos: Vec2,
     _evt: MouseEvent | TouchEvent
@@ -518,13 +522,9 @@ export class Editor implements EditorInstance {
 
       // End 1: First click
       if (this.draftRowPoints.length === 0) {
-        const targetBuilding = this.draftRowBuildingId
-          ? this.floorplan.buildings.find(
-              (b) => b.id === this.draftRowBuildingId
-            )
-          : this.floorplan.buildings.find((b) =>
-              pointInPolygon(snappedPos, buildingFootprint(b))
-            );
+        const targetBuilding = this.floorplan.buildings.find((b) =>
+          pointInPolygon(snappedPos, buildingFootprint(b))
+        );
 
         if (!targetBuilding) {
           this.emitter.emit('rowCreationFailed', {
@@ -554,16 +554,12 @@ export class Editor implements EditorInstance {
         return;
       }
 
-      const building = this.draftRowBuildingId
-        ? this.floorplan.buildings.find((b) => b.id === this.draftRowBuildingId)
-        : this.floorplan.buildings.find((b) =>
-            pointInPolygon(end1, buildingFootprint(b))
-          );
+      const building = this.floorplan.buildings.find(
+        (b) => b.id === this.draftRowBuildingId
+      );
 
       if (!building) {
-        this.draftRowPoints = [];
-        this.renderer?.clearDraftPolygon();
-        this.emitter.emit('rowCreationPointsChange', []);
+        this.resetDraftRow();
         this.emitter.emit('rowCreationFailed', {
           reason: 'Table must be placed inside a building.',
         });
@@ -606,9 +602,7 @@ export class Editor implements EditorInstance {
         this.emitter.emit('rowCreationCompleted', createdRow);
       } else {
         // Validation failed (exceeds bounds or overlaps)
-        this.draftRowPoints = [];
-        this.renderer?.clearDraftPolygon();
-        this.emitter.emit('rowCreationPointsChange', []);
+        this.resetDraftRow();
         this.emitter.emit('rowCreationFailed', {
           reason:
             'Cannot place table: exceeds building bounds or overlaps existing objects.',

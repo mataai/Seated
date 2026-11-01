@@ -3,6 +3,7 @@ import type {
   ElementRef,
   OnChanges,
   OnDestroy,
+  OnInit,
   SimpleChanges,
 } from '@angular/core';
 import {
@@ -44,7 +45,7 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SeatsEditorComponent
-  implements AfterViewInit, OnChanges, OnDestroy
+  implements OnInit, AfterViewInit, OnChanges, OnDestroy
 {
   private ngZone = inject(NgZone);
   private cdr = inject(ChangeDetectorRef);
@@ -61,11 +62,17 @@ export class SeatsEditorComponent
   readonly showProperties = input(true);
   readonly showFloatingBar = input(true);
 
+  // Panel collapsible inputs
+  readonly leftPanelCollapsed = input(false);
+  readonly rightPanelCollapsed = input(false);
+
   readonly change = output<Floorplan>();
   readonly toolChange = output<ToolType>();
   readonly selectionChange = output<string[]>();
   readonly previewToggle = output<boolean>();
   readonly violationsUpdated = output<Violation[]>();
+  readonly leftPanelCollapseChange = output<boolean>();
+  readonly rightPanelCollapseChange = output<boolean>();
 
   private editor?: EditorInstance;
   private lastEmittedPlan?: Floorplan;
@@ -73,12 +80,14 @@ export class SeatsEditorComponent
   // Editor UI State
   public currentTool: ToolType = 'select';
   public isPreviewActive = false;
+  public isLeftPanelCollapsed = false;
+  public isRightPanelCollapsed = false;
   public selectedNodeId: string | null = null;
   public selectedNodeType: 'building' | 'zone' | 'row' | null = null;
   public lastViolations: Violation[] = [];
 
   // Editions Panel Tab state
-  public editionsTab: 'buildings' | 'zones' | 'rows' = 'buildings';
+  public editionsTab: 'buildings' | 'zones' | 'tables' = 'buildings';
 
   // Editions Forms - Buildings
   public buildingDrawMode: 'draw' | 'rect' = 'draw';
@@ -99,7 +108,6 @@ export class SeatsEditorComponent
   public newZoneHeight = 90;
 
   // Editions Forms - Rows
-  public rowTargetBuildingId = '';
   public newRowSeatCount = 8;
   public newRowSide: 'one' | 'both' = 'both';
   public newRowSeatSpacing = 40;
@@ -210,6 +218,11 @@ export class SeatsEditorComponent
   // -------------------------------------------------------------
   // Lifecycle
   // -------------------------------------------------------------
+  ngOnInit(): void {
+    this.isLeftPanelCollapsed = this.leftPanelCollapsed();
+    this.isRightPanelCollapsed = this.rightPanelCollapsed();
+  }
+
   ngAfterViewInit(): void {
     this.ngZone.runOutsideAngular(() => {
       this.editor = createEditor(this.containerRef().nativeElement, {
@@ -263,6 +276,7 @@ export class SeatsEditorComponent
 
       this.editor.on('buildingCreationStarted', (mode) => {
         this.ngZone.run(() => {
+          this.editionsTab = 'buildings';
           this.isDrawingBuilding = true;
           this.buildingCreationMode =
             mode ||
@@ -309,6 +323,7 @@ export class SeatsEditorComponent
 
       this.editor.on('rowCreationStarted', () => {
         this.ngZone.run(() => {
+          this.editionsTab = 'tables';
           this.isDrawingRow = true;
           this.draftRowPointsCount = 0;
           this.rowCreationError = null;
@@ -353,6 +368,13 @@ export class SeatsEditorComponent
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes['leftPanelCollapsed']) {
+      this.isLeftPanelCollapsed = this.leftPanelCollapsed();
+    }
+    if (changes['rightPanelCollapsed']) {
+      this.isRightPanelCollapsed = this.rightPanelCollapsed();
+    }
+
     const editor = this.editor;
     if (!editor) return;
 
@@ -508,7 +530,45 @@ export class SeatsEditorComponent
     this.cdr.markForCheck();
   }
 
+  public switchEditionsTab(
+    tab: 'buildings' | 'zones' | 'tables' | 'rows'
+  ): void {
+    const targetTab: 'buildings' | 'zones' | 'tables' =
+      tab === 'rows' ? 'tables' : tab;
+    if (this.isDrawingBuilding && targetTab !== 'buildings') {
+      this.cancelBuildingCreation();
+    }
+    if (this.isDrawingRow && targetTab !== 'tables') {
+      this.cancelRowCreation();
+    }
+    this.editionsTab = targetTab;
+    this.cdr.markForCheck();
+  }
+
+  public toggleLeftPanel(): void {
+    this.isLeftPanelCollapsed = !this.isLeftPanelCollapsed;
+    this.leftPanelCollapseChange.emit(this.isLeftPanelCollapsed);
+    this.cdr.markForCheck();
+  }
+
+  public toggleRightPanel(): void {
+    this.isRightPanelCollapsed = !this.isRightPanelCollapsed;
+    this.rightPanelCollapseChange.emit(this.isRightPanelCollapsed);
+    this.cdr.markForCheck();
+  }
+
   public setTool(tool: ToolType): void {
+    if (tool !== 'building' && this.isDrawingBuilding) {
+      this.cancelBuildingCreation();
+    }
+    if (tool !== 'row' && this.isDrawingRow) {
+      this.cancelRowCreation();
+    }
+    if (tool === 'building') {
+      this.editionsTab = 'buildings';
+    } else if (tool === 'row') {
+      this.editionsTab = 'tables';
+    }
     this.currentTool = tool;
     this.editor?.setTool(tool);
     this.cdr.markForCheck();
@@ -710,20 +770,12 @@ export class SeatsEditorComponent
   }
 
   public startRowCreation(): void {
-    const bId =
-      this.rowTargetBuildingId ||
-      this.selectedBuilding?.id ||
-      this.currentFloorplan?.buildings?.[0]?.id;
-
-    this.editor?.startRowCreation(
-      {
-        side: this.newRowSide,
-        seatSpacing: this.newRowSeatSpacing,
-        seatRadius: this.newRowSeatRadius,
-        tableWidth: this.newRowTableWidth,
-      },
-      bId
-    );
+    this.editor?.startRowCreation({
+      side: this.newRowSide,
+      seatSpacing: this.newRowSeatSpacing,
+      seatRadius: this.newRowSeatRadius,
+      tableWidth: this.newRowTableWidth,
+    });
     this.cdr.markForCheck();
   }
 

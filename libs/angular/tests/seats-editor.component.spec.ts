@@ -184,4 +184,176 @@ describe('SeatsEditorComponent', () => {
     fixture.detectChanges();
     expect(component.rowCreationError).toBeNull();
   });
+
+  it('initiates row creation without pre-defining a target building', () => {
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.detectChanges();
+
+    const startRowCreationSpy = vi.spyOn(
+      (component as any).editor,
+      'startRowCreation'
+    );
+
+    component.startRowCreation();
+    fixture.detectChanges();
+
+    expect(startRowCreationSpy).toHaveBeenCalledWith({
+      side: component.newRowSide,
+      seatSpacing: component.newRowSeatSpacing,
+      seatRadius: component.newRowSeatRadius,
+      tableWidth: component.newRowTableWidth,
+    });
+  });
+
+  it('switches tabs and synchronizes tab with tool selection', () => {
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.detectChanges();
+
+    expect(component.editionsTab).toBe('buildings');
+
+    component.switchEditionsTab('tables');
+    expect(component.editionsTab).toBe('tables');
+
+    component.startRowCreation();
+    expect(component.isDrawingRow).toBe(true);
+
+    // Switching away cancels active drawing
+    component.switchEditionsTab('zones');
+    expect(component.editionsTab).toBe('zones');
+    expect(component.isDrawingRow).toBe(false);
+
+    // Setting tool to building switches tab to buildings
+    component.setTool('building');
+    expect(component.editionsTab).toBe('buildings');
+  });
+
+  it('cancels active drawing when switching tools', () => {
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.detectChanges();
+
+    component.startRowCreation();
+    expect(component.isDrawingRow).toBe(true);
+
+    component.setTool('select');
+    expect(component.isDrawingRow).toBe(false);
+
+    component.startBuildingCreation();
+    expect(component.isDrawingBuilding).toBe(true);
+
+    component.setTool('pan');
+    expect(component.isDrawingBuilding).toBe(false);
+  });
+
+  it('normalizes "rows" tab to "tables"', () => {
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.detectChanges();
+
+    component.switchEditionsTab('rows');
+    expect(component.editionsTab).toBe('tables');
+  });
+
+  it('deletes selected item via deleteSelected and enables/disables delete button', () => {
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.detectChanges();
+
+    const deleteBtn = fixture.nativeElement.querySelector('.delete-btn');
+    expect(deleteBtn.disabled).toBe(true);
+
+    const bId = SAMPLE_FLOORPLAN.buildings[0].id;
+    component.selectNode(bId, 'building');
+    fixture.detectChanges();
+
+    expect(component.selectedNodeId).toBe(bId);
+    expect(deleteBtn.disabled).toBe(false);
+
+    const deleteSpy = vi.spyOn((component as any).editor, 'deleteNode');
+    component.deleteSelected();
+    expect(deleteSpy).toHaveBeenCalledWith(bId);
+  });
+
+  it('collapses and expands left and right panels', () => {
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.detectChanges();
+
+    const leftSidebar =
+      fixture.nativeElement.querySelector('.editor-left-panel');
+    const rightSidebar = fixture.nativeElement.querySelector(
+      '.editor-right-panel'
+    );
+
+    expect(leftSidebar.classList.contains('collapsed')).toBe(false);
+    expect(rightSidebar.classList.contains('collapsed')).toBe(false);
+    expect(
+      fixture.nativeElement.querySelector('.canvas-panel-toggle.left-toggle')
+    ).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('.canvas-panel-toggle.right-toggle')
+    ).toBeNull();
+
+    let leftCollapsedState: boolean | undefined;
+    let rightCollapsedState: boolean | undefined;
+    component.leftPanelCollapseChange.subscribe(
+      (c) => (leftCollapsedState = c)
+    );
+    component.rightPanelCollapseChange.subscribe(
+      (c) => (rightCollapsedState = c)
+    );
+
+    // Collapse left panel
+    component.toggleLeftPanel();
+    fixture.detectChanges();
+    expect(component.isLeftPanelCollapsed).toBe(true);
+    expect(leftCollapsedState).toBe(true);
+    expect(leftSidebar.classList.contains('collapsed')).toBe(true);
+    expect(
+      fixture.nativeElement.querySelector('.canvas-panel-toggle.left-toggle')
+    ).toBeTruthy();
+
+    // Collapse right panel
+    component.toggleRightPanel();
+    fixture.detectChanges();
+    expect(component.isRightPanelCollapsed).toBe(true);
+    expect(rightCollapsedState).toBe(true);
+    expect(rightSidebar.classList.contains('collapsed')).toBe(true);
+    expect(
+      fixture.nativeElement.querySelector('.canvas-panel-toggle.right-toggle')
+    ).toBeTruthy();
+
+    // Re-expand via clicking canvas docked toggles
+    const leftDockBtn = fixture.nativeElement.querySelector(
+      '.canvas-panel-toggle.left-toggle'
+    );
+    leftDockBtn.click();
+    fixture.detectChanges();
+    expect(component.isLeftPanelCollapsed).toBe(false);
+    expect(leftCollapsedState).toBe(false);
+    expect(leftSidebar.classList.contains('collapsed')).toBe(false);
+
+    const rightDockBtn = fixture.nativeElement.querySelector(
+      '.canvas-panel-toggle.right-toggle'
+    );
+    rightDockBtn.click();
+    fixture.detectChanges();
+    expect(component.isRightPanelCollapsed).toBe(false);
+    expect(rightCollapsedState).toBe(false);
+    expect(rightSidebar.classList.contains('collapsed')).toBe(false);
+  });
+
+  it('respects initial leftPanelCollapsed and rightPanelCollapsed inputs', () => {
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.componentRef.setInput('leftPanelCollapsed', true);
+    fixture.componentRef.setInput('rightPanelCollapsed', true);
+    fixture.detectChanges();
+
+    expect(component.isLeftPanelCollapsed).toBe(true);
+    expect(component.isRightPanelCollapsed).toBe(true);
+
+    const leftSidebar =
+      fixture.nativeElement.querySelector('.editor-left-panel');
+    const rightSidebar = fixture.nativeElement.querySelector(
+      '.editor-right-panel'
+    );
+    expect(leftSidebar.classList.contains('collapsed')).toBe(true);
+    expect(rightSidebar.classList.contains('collapsed')).toBe(true);
+  });
 });
