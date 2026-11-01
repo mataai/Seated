@@ -30,7 +30,10 @@ import {
   type Zone,
 } from '@open-seats/core';
 import {
+  calculateFitScale,
   createEditor,
+  isPdfFile,
+  loadPdfPage,
   type EditorInstance,
   type EditorOptions,
   type ToolType,
@@ -52,6 +55,8 @@ export class SeatsEditorComponent
 
   readonly containerRef =
     viewChild.required<ElementRef<HTMLDivElement>>('container');
+  readonly bgFileInputRef =
+    viewChild<ElementRef<HTMLInputElement>>('bgFileInput');
 
   readonly floorplan = input<Floorplan>();
   readonly tool = input<ToolType>('select');
@@ -67,6 +72,7 @@ export class SeatsEditorComponent
   readonly rightPanelCollapsed = input(false);
 
   readonly change = output<Floorplan>();
+  readonly floorplanChange = output<Floorplan>();
   readonly toolChange = output<ToolType>();
   readonly selectionChange = output<string[]>();
   readonly previewToggle = output<boolean>();
@@ -76,6 +82,7 @@ export class SeatsEditorComponent
 
   private editor?: EditorInstance;
   private lastEmittedPlan?: Floorplan;
+  protected readonly Math = Math;
 
   // Editor UI State
   public currentTool: ToolType = 'select';
@@ -88,6 +95,12 @@ export class SeatsEditorComponent
 
   // Editions Panel Tab state
   public editionsTab: 'buildings' | 'zones' | 'tables' = 'buildings';
+
+  // Floorplan Blueprint / Background State
+  public isUploadingBackground = false;
+  public backgroundUploadError: string | null = null;
+  public cachedPdfBuffer: ArrayBuffer | null = null;
+  public backgroundDimensions: { width: number; height: number } | null = null;
 
   // Editions Forms - Buildings
   public buildingDrawMode: 'draw' | 'rect' = 'draw';
@@ -134,6 +147,10 @@ export class SeatsEditorComponent
   // -------------------------------------------------------------
   public get currentFloorplan(): Floorplan | undefined {
     return this.editor?.getFloorplan() ?? this.floorplan();
+  }
+
+  public get currentBackground(): FloorplanBackground | undefined {
+    return this.editor?.getBackground() ?? this.currentFloorplan?.background;
   }
 
   public get selectedBuilding(): Building | null {
@@ -238,6 +255,7 @@ export class SeatsEditorComponent
         this.lastEmittedPlan = plan;
         this.ngZone.run(() => {
           this.change.emit(plan);
+          this.floorplanChange.emit(plan);
           this.cdr.markForCheck();
         });
       });
@@ -381,6 +399,13 @@ export class SeatsEditorComponent
     this.ngZone.runOutsideAngular(() => {
       const floorplan = this.floorplan();
       if (changes['floorplan'] && floorplan) {
+        if (
+          typeof floorplan !== 'object' ||
+          'target' in (floorplan as any) ||
+          !('schemaVersion' in (floorplan as any))
+        ) {
+          return;
+        }
         if (floorplan !== this.lastEmittedPlan) {
           const current = editor.getFloorplan();
           if (JSON.stringify(current) !== JSON.stringify(floorplan)) {
@@ -395,6 +420,15 @@ export class SeatsEditorComponent
         editor.setTool(tool);
       }
     });
+  }
+
+  @HostListener('change', ['$event'])
+  public handleNativeChange(e: Event | unknown): void {
+    // Prevent internal DOM input/select/range change events from bubbling out
+    // of the component and colliding with Angular's (change) output.
+    if (e && typeof (e as any).stopPropagation === 'function') {
+      (e as Event).stopPropagation();
+    }
   }
 
   @HostListener('keydown', ['$event'])
@@ -607,6 +641,147 @@ export class SeatsEditorComponent
 
   public setBackground(bg: FloorplanBackground | undefined): void {
     this.editor?.setBackground(bg);
+    this.cdr.markForCheck();
+  }
+
+  public triggerFileInput(): void {
+    this.bgFileInputRef()?.nativeElement.click();
+  }
+
+  public onBackgroundDragOver(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  public async onBackgroundFileDrop(event: DragEvent): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+    const file = event.dataTransfer?.files?.[0];
+    if (file) {
+      await this.uploadBackgroundFile(file);
+    }
+  }
+
+  public async onBackgroundFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) {
+      await this.uploadBackgroundFile(file);
+    }
+    input.value = '';
+  }
+
+  public async uploadBackgroundFile(file: File): Promise<void> {
+    this.isUploadingBackground = true;
+    this.backgroundUploadError = null;
+    this.cdr.markForCheck();
+
+    try {
+      if (isPdfFile(file)) {
+        this.cachedPdfBuffer = await file.arrayBuffer();
+      } else {
+        this.cachedPdfBuffer = null;
+      }
+
+      const result = await this.editor?.loadBackgroundFromFile(file);
+      if (result) {
+        this.backgroundDimensions = {
+          width: result.width,
+          height: result.height,
+        };
+      }
+    } catch (err: unknown) {
+      this.backgroundUploadError =
+        err instanceof Error
+          ? err.message
+          : 'Failed to load background floorplan';
+    } finally {
+      this.isUploadingBackground = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  public updateBackground(updates: Partial<FloorplanBackground>): void {
+    this.editor?.updateBackground(updates);
+    this.cdr.markForCheck();
+  }
+
+  public setBackgroundOpacity(opacityPercent: number): void {
+    const opacity = Math.max(0, Math.min(1, opacityPercent / 100));
+    this.updateBackground({ opacity });
+  }
+
+  public setBackgroundScale(scale: number): void {
+    if (scale > 0) {
+      this.updateBackground({ scale });
+    }
+  }
+
+  public setBackgroundPosition(x: number, y: number): void {
+    this.updateBackground({ position: { x, y } });
+  }
+
+  public toggleBackgroundVisibility(): void {
+    const current = this.currentBackground;
+    const visible = current?.visible === false;
+    this.updateBackground({ visible });
+  }
+
+  public toggleBackgroundLocked(): void {
+    const current = this.currentBackground;
+    const locked = !(current?.locked ?? true);
+    this.updateBackground({ locked });
+  }
+
+  public removeBackground(): void {
+    this.editor?.setBackground(undefined);
+    this.cachedPdfBuffer = null;
+    this.backgroundDimensions = null;
+    this.backgroundUploadError = null;
+    this.cdr.markForCheck();
+  }
+
+  public fitBackgroundToCanvas(): void {
+    const plan = this.currentFloorplan;
+    if (!plan || !this.backgroundDimensions) return;
+    const fit = calculateFitScale(this.backgroundDimensions, plan.dimensions);
+    this.updateBackground({
+      scale: fit.scale,
+      position: fit.position,
+    });
+  }
+
+  public async changePdfPage(newPage: number): Promise<void> {
+    const bg = this.currentBackground;
+    if (!this.cachedPdfBuffer || !bg || !bg.totalPages) return;
+    const targetPage = Math.max(1, Math.min(newPage, bg.totalPages));
+    if (targetPage === bg.pageNumber) return;
+
+    this.isUploadingBackground = true;
+    this.cdr.markForCheck();
+
+    try {
+      const pageResult = await loadPdfPage(
+        this.cachedPdfBuffer,
+        targetPage,
+        2.0
+      );
+      this.backgroundDimensions = {
+        width: pageResult.width,
+        height: pageResult.height,
+      };
+      this.updateBackground({
+        src: pageResult.dataUrl,
+        pageNumber: pageResult.currentPage,
+        totalPages: pageResult.numPages,
+      });
+    } catch (err: unknown) {
+      this.backgroundUploadError =
+        err instanceof Error ? err.message : 'Failed to switch PDF page';
+    } finally {
+      this.isUploadingBackground = false;
+      this.cdr.markForCheck();
+    }
   }
 
   // -------------------------------------------------------------

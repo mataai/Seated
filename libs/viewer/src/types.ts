@@ -51,6 +51,7 @@ export interface ViewerOptions {
   tolerance?: number;
   ariaLabel?: string;
   enableKeyboardNavigation?: boolean;
+  showBackground?: boolean;
 }
 
 export interface ViewerInstance {

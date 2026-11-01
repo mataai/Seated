@@ -401,6 +401,42 @@
         </div>
 
         <div>
+          <div class="tool-section-title">Blueprint (Image / PDF)</div>
+          <input
+            id="fileBgInput"
+            type="file"
+            accept="image/*,.pdf"
+            style="display: none"
+          />
+          <button
+            id="btnUploadBlueprint"
+            class="btn"
+            style="width: 100%; margin-bottom: 6px"
+          >
+            Upload Blueprint
+          </button>
+          <div
+            id="blueprintActions"
+            style="display: none; flex-direction: column; gap: 6px"
+          >
+            <button id="btnToggleBlueprint" class="btn" style="width: 100%">
+              Toggle Visibility
+            </button>
+            <button
+              id="btnRemoveBlueprint"
+              class="btn"
+              style="
+                width: 100%;
+                color: #ef4444;
+                border-color: rgba(239, 68, 68, 0.3);
+              "
+            >
+              Remove Blueprint
+            </button>
+          </div>
+        </div>
+
+        <div>
           <div class="tool-section-title">Preview</div>
           <button
             id="btnTogglePreview"

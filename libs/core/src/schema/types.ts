@@ -14,6 +14,10 @@ export interface FloorplanBackground {
   scale?: number;
   opacity?: number;
   locked?: boolean;
+  visible?: boolean;
+  filename?: string;
+  pageNumber?: number;
+  totalPages?: number;
 }
 
 export interface Seat {

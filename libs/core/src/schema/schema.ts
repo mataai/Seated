@@ -22,6 +22,10 @@ export const FloorplanBackgroundSchema = z
     scale: z.number().positive().optional(),
     opacity: z.number().min(0).max(1).optional(),
     locked: z.boolean().optional(),
+    visible: z.boolean().optional(),
+    filename: z.string().optional(),
+    pageNumber: z.number().int().positive().optional(),
+    totalPages: z.number().int().positive().optional(),
   })
   .passthrough();
 
@@ -114,10 +118,13 @@ export const BuildingSchema = z
 
 export const FloorplanSchema = z
   .object({
-    schemaVersion: z.literal(1),
-    dimensions: FloorplanDimensionsSchema,
+    schemaVersion: z.literal(1).default(1),
+    dimensions: FloorplanDimensionsSchema.default({
+      width: 1200,
+      height: 800,
+    }),
     background: FloorplanBackgroundSchema.optional(),
-    buildings: z.array(BuildingSchema),
+    buildings: z.array(BuildingSchema).default([]),
   })
   .passthrough();
 
@@ -127,12 +134,46 @@ export type InferredZone = z.infer<typeof ZoneSchema>;
 export type InferredRow = z.infer<typeof RowSchema>;
 export type InferredSeat = z.infer<typeof SeatSchema>;
 
-export function parseFloorplan(input: unknown): IFloorplan {
-  return FloorplanSchema.parse(input) as IFloorplan;
+export function parseFloorplan(input: unknown = {}): IFloorplan {
+  if (
+    input &&
+    typeof input === 'object' &&
+    ('target' in input || 'preventDefault' in input)
+  ) {
+    throw new Error(
+      'Invalid input to parseFloorplan: expected Floorplan, received DOM Event'
+    );
+  }
+  return FloorplanSchema.parse(input ?? {}) as IFloorplan;
 }
 
 export function safeParseFloorplan(
-  input: unknown
+  input: unknown = {}
 ): ReturnType<typeof FloorplanSchema.safeParse> {
-  return FloorplanSchema.safeParse(input);
+  if (
+    input &&
+    typeof input === 'object' &&
+    ('target' in input || 'preventDefault' in input)
+  ) {
+    return FloorplanSchema.safeParse(null);
+  }
+  return FloorplanSchema.safeParse(input ?? {});
 }
+
+/**
+ * Safely deep-clones a floorplan or seating model.
+ * Uses native `structuredClone` when possible, with a serialization fallback
+ * that strips non-clonable properties (such as functions or DOM/framework wrappers).
+ */
+export function cloneFloorplan<T = IFloorplan>(obj: T): T {
+  try {
+    return structuredClone(obj);
+  } catch {
+    return JSON.parse(
+      JSON.stringify(obj, (_key, val) =>
+        typeof val === 'function' ? undefined : val
+      )
+    );
+  }
+}
+

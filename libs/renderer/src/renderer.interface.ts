@@ -1,6 +1,7 @@
 import type {
   Building,
   Floorplan,
+  FloorplanBackground,
   Row,
   Seat,
   StatusRegistry,
@@ -64,6 +65,8 @@ export interface RendererOptions {
     target?: unknown
   ) => void;
   onStageMouseMove?: (pos: Vec2, evt: MouseEvent) => void;
+  showBackground?: boolean;
+  onBackgroundChange?: (bg: FloorplanBackground) => void;
   onReady?: () => void;
 }
 

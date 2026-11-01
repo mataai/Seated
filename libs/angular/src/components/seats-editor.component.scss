@@ -1127,3 +1127,238 @@
   line-height: 1.4;
   margin: 0;
 }
+
+/* Blueprint / Background Reference Styles */
+.blueprint-quick-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.blueprint-quick-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  color: #d4d4d8;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.4);
+    color: #e0e7ff;
+  }
+
+  &.has-blueprint {
+    background: rgba(99, 102, 241, 0.08);
+    border-style: solid;
+    border-color: rgba(99, 102, 241, 0.3);
+    color: #a5b4fc;
+  }
+}
+
+.blueprint-icon-btn {
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #71717a;
+
+  &.active {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.1);
+    border-color: rgba(56, 189, 248, 0.3);
+  }
+}
+
+.blueprint-card {
+  margin-bottom: 14px;
+}
+
+.blueprint-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.2);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.blueprint-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 2px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(99, 102, 241, 0.06);
+    border-color: #6366f1;
+  }
+
+  &.is-uploading {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  .dropzone-icon {
+    color: #818cf8;
+    margin-bottom: 8px;
+  }
+
+  .dropzone-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f4f4f5;
+    margin-bottom: 4px;
+  }
+
+  .dropzone-hint {
+    font-size: 11px;
+    color: #a1a1aa;
+    line-height: 1.4;
+    max-width: 240px;
+
+    strong {
+      color: #e4e4e7;
+    }
+  }
+}
+
+.blueprint-loaded-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.blueprint-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+
+  .blueprint-filename-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 500;
+    color: #e4e4e7;
+
+    .file-icon {
+      font-size: 14px;
+    }
+
+    .file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+}
+
+.blueprint-page-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  padding: 6px 10px;
+  border-radius: 6px;
+
+  .page-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #a5b4fc;
+  }
+
+  .pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .page-nav-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: #f4f4f5;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      cursor: pointer;
+
+      &:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+
+      &:not(:disabled):hover {
+        background: #6366f1;
+      }
+    }
+
+    .page-indicator {
+      font-size: 11px;
+      font-weight: 700;
+      color: #f4f4f5;
+    }
+  }
+}
+
+.form-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+
+  .slider-value {
+    font-size: 11px;
+    font-weight: 700;
+    color: #818cf8;
+  }
+}
+
+.form-range {
+  width: 100%;
+  height: 6px;
+  accent-color: #6366f1;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.upload-error-box {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  font-size: 11px;
+  padding: 8px;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+
+.blueprint-note {
+  font-size: 10px;
+  color: #71717a;
+  line-height: 1.35;
+  margin: 6px 0 0 0;
+  font-style: italic;
+}

@@ -39,7 +39,7 @@
     <seats-editor
       style="flex: 1; width: 100%; height: calc(100vh - 56px); min-width: 0"
       [floorplan]="floorplan"
-      (change)="onFloorplanChanged($event)"
+      (floorplanChange)="onFloorplanChanged($event)"
       (selectionChange)="onEditorSelectionChanged($event)"
       (violationsUpdated)="onViolationsUpdated($event)"
     ></seats-editor>

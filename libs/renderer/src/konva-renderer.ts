@@ -248,11 +248,14 @@ export class KonvaRenderer implements Renderer {
   }
 
   private renderBackground(floorplan: Floorplan): void {
+    if (this.options.showBackground === false) return;
+    if (floorplan.background?.visible === false) return;
     const token = ++this.backgroundToken;
     if (!floorplan.background?.src) return;
 
     const bg = floorplan.background;
     const addImage = (imgObj: HTMLImageElement) => {
+      const isLocked = bg.locked ?? true;
       const konvaImage = new Konva.Image({
         image: imgObj,
         x: bg.position?.x ?? 0,
@@ -260,8 +263,21 @@ export class KonvaRenderer implements Renderer {
         scaleX: bg.scale ?? 1,
         scaleY: bg.scale ?? 1,
         opacity: bg.opacity ?? 1,
-        listening: !bg.locked,
+        listening: !isLocked,
+        draggable: !isLocked,
       });
+
+      if (!isLocked) {
+        konvaImage.on('dragend', () => {
+          if (floorplan.background) {
+            floorplan.background.position = {
+              x: Math.round(konvaImage.x()),
+              y: Math.round(konvaImage.y()),
+            };
+            this.options.onBackgroundChange?.(floorplan.background);
+          }
+        });
+      }
 
       this.backgroundLayer.add(konvaImage);
       this.backgroundLayer.batchDraw();

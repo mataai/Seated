@@ -806,6 +806,29 @@ describe('Editor (@open-seats/editor)', () => {
     expect(editor.getFloorplan()).toEqual(initialPlan);
   });
 
+  it('safely handles floorplans with non-clonable functions on loadFloorplan and getFloorplan', () => {
+    editor = createEditor(container, { floorplan: initialPlan });
+    const planWithFunction = {
+      ...initialPlan,
+      nonClonableFn: () => 'danger',
+      buildings: [
+        {
+          ...initialPlan.buildings[0],
+          data: {
+            onClick: () => 'clicked',
+          },
+        },
+      ],
+    } as unknown as Floorplan;
+
+    // Must not throw "DOMException: Function object could not be cloned."
+    expect(() => editor!.loadFloorplan(planWithFunction)).not.toThrow();
+    const retrieved = editor!.getFloorplan();
+    expect((retrieved as any).nonClonableFn).toBeUndefined();
+    expect(retrieved.buildings[0].data?.onClick).toBeUndefined();
+    expect(retrieved.buildings[0].id).toBe(initialPlan.buildings[0].id);
+  });
+
   it('creates table interactively via 2 endpoint clicks, preserving drawn length and calculating seat count dynamically', () => {
     editor = createEditor(container, { floorplan: initialPlan });
     const editorAny = editor as any;

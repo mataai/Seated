@@ -356,4 +356,90 @@ describe('SeatsEditorComponent', () => {
     expect(leftSidebar.classList.contains('collapsed')).toBe(true);
     expect(rightSidebar.classList.contains('collapsed')).toBe(true);
   });
+
+  describe('Blueprint / Background floorplan features', () => {
+    it('displays blueprint dropzone when no background is present', () => {
+      fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+      fixture.detectChanges();
+
+      const dropzone = fixture.nativeElement.querySelector(
+        '.blueprint-dropzone'
+      );
+      expect(dropzone).toBeTruthy();
+      expect(dropzone.textContent).toContain('Upload Floorplan Blueprint');
+    });
+
+    it('uploads an image blueprint, applies tracing defaults, and updates controls', async () => {
+      fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+      fixture.detectChanges();
+
+      const dummyFile = new File(['image-bytes'], 'architectural_plan.png', {
+        type: 'image/png',
+      });
+
+      await component.uploadBackgroundFile(dummyFile);
+      fixture.detectChanges();
+
+      expect(component.currentBackground).toBeDefined();
+      expect(component.currentBackground?.filename).toBe(
+        'architectural_plan.png'
+      );
+      expect(component.currentBackground?.opacity).toBe(0.6);
+      expect(component.currentBackground?.locked).toBe(true);
+      expect(component.currentBackground?.visible).toBe(true);
+
+      // Verify blueprint card displays loaded state
+      const loadedView = fixture.nativeElement.querySelector(
+        '.blueprint-loaded-view'
+      );
+      expect(loadedView).toBeTruthy();
+      expect(loadedView.textContent).toContain('architectural_plan.png');
+
+      // Test opacity adjustment
+      component.setBackgroundOpacity(40);
+      fixture.detectChanges();
+      expect(component.currentBackground?.opacity).toBe(0.4);
+
+      // Test scale adjustment
+      component.setBackgroundScale(1.5);
+      fixture.detectChanges();
+      expect(component.currentBackground?.scale).toBe(1.5);
+
+      // Verify native DOM change event (from releasing slider) does not erase blueprint
+      const nativeChangeEvent = new Event('change', { bubbles: true });
+      component.handleNativeChange(nativeChangeEvent);
+      fixture.detectChanges();
+      expect(component.currentBackground).toBeTruthy();
+      expect(component.currentBackground?.scale).toBe(1.5);
+
+      // Test position adjustment
+      component.setBackgroundPosition(100, 50);
+      fixture.detectChanges();
+      expect(component.currentBackground?.position).toEqual({ x: 100, y: 50 });
+
+      // Test toggle lock
+      component.toggleBackgroundLocked();
+      fixture.detectChanges();
+      expect(component.currentBackground?.locked).toBe(false);
+
+      // Test toggle visibility
+      component.toggleBackgroundVisibility();
+      fixture.detectChanges();
+      expect(component.currentBackground?.visible).toBe(false);
+
+      // Test fit to canvas
+      component.backgroundDimensions = { width: 1000, height: 600 };
+      component.fitBackgroundToCanvas();
+      fixture.detectChanges();
+      expect(component.currentBackground?.scale).toBeGreaterThan(0);
+
+      // Test remove
+      component.removeBackground();
+      fixture.detectChanges();
+      expect(component.currentBackground).toBeUndefined();
+      expect(
+        fixture.nativeElement.querySelector('.blueprint-dropzone')
+      ).toBeTruthy();
+    });
+  });
 });

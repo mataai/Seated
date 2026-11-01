@@ -1,6 +1,7 @@
 import {
   buildingFootprint,
   canPlace,
+  cloneFloorplan,
   inverseTransformPoint,
   parseFloorplan,
   pointInPolygon,
@@ -24,6 +25,11 @@ import type { EditorContext } from './operations/context';
 import { ClipboardOperations } from './operations/clipboard';
 import { RowOperations } from './operations/rows';
 import { ShapeOperations } from './operations/shapes';
+import {
+  loadFloorplanBackgroundFromFile,
+  type BackgroundLoadOptions,
+  type LoadedBackgroundResult,
+} from './background/background-loader';
 import type {
   BuildingCreationMode,
   EditorEvents,
@@ -87,7 +93,7 @@ export class Editor implements EditorInstance {
 
     // parseFloorplan validates the input and returns a fresh copy
     this.floorplan = options.floorplan
-      ? parseFloorplan(options.floorplan)
+      ? cloneFloorplan(parseFloorplan(options.floorplan))
       : {
           schemaVersion: 1,
           dimensions: { width: 1200, height: 800 },
@@ -144,6 +150,11 @@ export class Editor implements EditorInstance {
       },
       onStageMouseMove: (worldPos, evt) => {
         this.handleStageMouseMove(worldPos, evt);
+      },
+      showBackground: true,
+      onBackgroundChange: (bg) => {
+        this.floorplan.background = bg;
+        this.emitChange();
       },
     });
   }
@@ -330,7 +341,7 @@ export class Editor implements EditorInstance {
 
   public loadFloorplan(floorplan: Floorplan): void {
     // Validate first so an invalid plan leaves the editor untouched
-    const parsed = parseFloorplan(floorplan);
+    const parsed = cloneFloorplan(parseFloorplan(floorplan));
     if (this.isDrawingBuilding) {
       this.cancelBuildingCreation();
     }
@@ -344,7 +355,7 @@ export class Editor implements EditorInstance {
   }
 
   public getFloorplan(): Floorplan {
-    return structuredClone(this.floorplan);
+    return cloneFloorplan(this.floorplan);
   }
 
   public setTool(tool: ToolType): void {
@@ -1049,6 +1060,39 @@ export class Editor implements EditorInstance {
 
     this.commandStack.execute(command);
     this.emitChange();
+  }
+
+  public getBackground(): FloorplanBackground | undefined {
+    return this.floorplan.background
+      ? { ...this.floorplan.background }
+      : undefined;
+  }
+
+  public updateBackground(updates: Partial<FloorplanBackground>): void {
+    if (!this.floorplan.background) return;
+    const oldBg = { ...this.floorplan.background };
+    const newBg = { ...this.floorplan.background, ...updates };
+    const command: Command = {
+      name: 'Update Background',
+      execute: () => {
+        this.floorplan.background = newBg;
+      },
+      undo: () => {
+        this.floorplan.background = oldBg;
+      },
+    };
+
+    this.commandStack.execute(command);
+    this.emitChange();
+  }
+
+  public async loadBackgroundFromFile(
+    file: File,
+    options?: BackgroundLoadOptions
+  ): Promise<LoadedBackgroundResult> {
+    const result = await loadFloorplanBackgroundFromFile(file, options);
+    this.setBackground(result.background);
+    return result;
   }
 
   public getSelectedNodeIds(): string[] {
