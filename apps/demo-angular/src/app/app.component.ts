@@ -2,8 +2,10 @@ import {
   Component,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
+  InjectionToken,
   inject,
   viewChild,
+  type OnDestroy,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
@@ -17,7 +19,21 @@ import {
   type Violation,
 } from '@open-seats/core';
 import type { ToolType } from '@open-seats/editor';
-import type { RenderSeatContext } from '@open-seats/viewer';
+import {
+  socketIoStatusSource,
+  type RenderSeatContext,
+  type StatusConnectionState,
+  type StatusSource,
+  type ViewerEvents,
+} from '@open-seats/viewer';
+import { io, type Socket } from 'socket.io-client';
+
+/** Live seat server (`npm run start:live-server`). Null disables live mode. */
+export const LIVE_SERVER_URL = new InjectionToken<string | null>(
+  'LIVE_SERVER_URL',
+  { factory: () => 'http://localhost:3030' }
+);
+const LIVE_FLOORPLAN_ID = 'demo';
 
 @Component({
   standalone: true,
@@ -27,8 +43,103 @@ import type { RenderSeatContext } from '@open-seats/viewer';
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrls: ['./app.component.scss'],
 })
-export class AppComponent {
+export class AppComponent implements OnDestroy {
   private cdr = inject(ChangeDetectorRef);
+  private liveServerUrl = inject(LIVE_SERVER_URL);
+  private socket?: Socket;
+
+  /** Passed to the viewer; null while live mode is off. */
+  public statusSource: StatusSource | null = null;
+  public liveState: StatusConnectionState | null = null;
+
+  /** Mirror of the viewer's statuses, kept in sync via `statusesChanged`. */
+  private seatStatuses: Record<string, string> = {};
+  /** Seats per status; selected seats are counted under "selected" only. */
+  public statusCounts: Record<string, number> = {};
+
+  constructor() {
+    this.seatStatuses = { ...this.statuses };
+    this.recountStatuses();
+    this.setLive(true);
+  }
+
+  public onStatusesChanged({
+    changes,
+    replaced,
+  }: ViewerEvents['statusesChanged']): void {
+    const next = replaced ? {} : { ...this.seatStatuses };
+    for (const [seatId, status] of Object.entries(changes)) {
+      if (status === null) delete next[seatId];
+      else next[seatId] = status;
+    }
+    this.seatStatuses = next;
+    this.recountStatuses();
+  }
+
+  private recountStatuses(): void {
+    const selected = new Set(this.selectedSeatIds);
+    const counts: Record<string, number> = {
+      available: 0,
+      reserved: 0,
+      locked: 0,
+    };
+    for (const building of this.floorplan.buildings) {
+      for (const row of building.rows) {
+        for (const seat of row.seats) {
+          if (selected.has(seat.id)) continue;
+          const status = this.seatStatuses[seat.id] ?? 'available';
+          counts[status] = (counts[status] ?? 0) + 1;
+        }
+      }
+    }
+    this.statusCounts = counts;
+    this.cdr.markForCheck();
+  }
+
+  public get liveEnabled(): boolean {
+    return this.statusSource !== null;
+  }
+
+  public get liveAvailable(): boolean {
+    return this.liveServerUrl !== null;
+  }
+
+  public setLive(enabled: boolean): void {
+    if (enabled && this.liveServerUrl && !this.socket) {
+      this.socket = io(this.liveServerUrl, {
+        auth: { floorplanId: LIVE_FLOORPLAN_ID },
+      });
+      this.statusSource = socketIoStatusSource(this.socket);
+      this.addLog('live', `Connecting to ${this.liveServerUrl}`);
+    } else if (!enabled && this.socket) {
+      this.statusSource = null;
+      this.socket.disconnect();
+      this.socket = undefined;
+      this.liveState = null;
+      this.addLog('live', 'Live updates off');
+    }
+    this.cdr.markForCheck();
+  }
+
+  public onConnectionStateChanged({
+    state,
+    error,
+  }: ViewerEvents['connectionStateChanged']): void {
+    this.liveState = state;
+    const reason = error instanceof Error ? ` (${error.message})` : '';
+    this.addLog('live', `${state}${reason}`);
+  }
+
+  public onSelectionInvalidated({
+    seats,
+  }: ViewerEvents['selectionInvalidated']): void {
+    const labels = seats.map((s) => s.seat.label).join(', ');
+    this.addLog('taken', `${labels} just became unavailable`);
+  }
+
+  ngOnDestroy(): void {
+    this.socket?.disconnect();
+  }
 
   readonly viewerComp = viewChild(SeatsViewerComponent);
   readonly editorComp = viewChild(SeatsEditorComponent);
@@ -102,6 +213,7 @@ export class AppComponent {
 
   public onFloorplanChanged(plan: Floorplan): void {
     this.floorplan = plan;
+    this.recountStatuses();
     this.addLog('editor', 'Floorplan modified');
     this.cdr.markForCheck();
   }
@@ -130,6 +242,7 @@ export class AppComponent {
   }): void {
     this.selectedSeatIds = payload.selectedSeatIds;
     this.selectedSeatLabels = payload.selectedSeats.map((s) => s.seat.label);
+    this.recountStatuses();
     this.addLog('selection', `${this.selectedSeatIds.length} seat(s) selected`);
     this.cdr.markForCheck();
   }
@@ -150,6 +263,10 @@ export class AppComponent {
   }
 
   public reserveSelected(): void {
+    if (this.liveState === 'live') {
+      void this.reserveOnServer([...this.selectedSeatIds]);
+      return;
+    }
     const viewerComp = this.viewerComp();
     if (viewerComp) {
       const updateMap: Record<string, string> = { ...this.statuses };
@@ -163,6 +280,28 @@ export class AppComponent {
         `Reserved ${this.selectedSeatIds.length} seat(s)`
       );
       this.cdr.markForCheck();
+    }
+  }
+
+  /**
+   * In a real app this is your booking API. The reference server broadcasts
+   * the change to every connected viewer, including this one.
+   */
+  private async reserveOnServer(seatIds: string[]): Promise<void> {
+    const changes = Object.fromEntries(seatIds.map((id) => [id, 'reserved']));
+    try {
+      const res = await fetch(
+        `${this.liveServerUrl}/floorplans/${LIVE_FLOORPLAN_ID}/seats`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ changes }),
+        }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      this.addLog('reserved', `Reserved ${seatIds.length} seat(s) on server`);
+    } catch (e) {
+      this.addLog('error', `Reservation failed: ${(e as Error).message}`);
     }
   }
 

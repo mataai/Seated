@@ -1,6 +1,6 @@
 import type { ComponentFixture } from '@angular/core/testing';
 import { TestBed } from '@angular/core/testing';
-import { AppComponent } from './app.component';
+import { AppComponent, LIVE_SERVER_URL } from './app.component';
 
 describe('AppComponent', () => {
   let fixture: ComponentFixture<AppComponent>;
@@ -9,6 +9,8 @@ describe('AppComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AppComponent],
+      // No live server in unit tests.
+      providers: [{ provide: LIVE_SERVER_URL, useValue: null }],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AppComponent);
@@ -50,5 +52,36 @@ describe('AppComponent', () => {
 
     expect(component.selectedSeatIds).toEqual(['s-a-1a']);
     expect(component.selectedSeatLabels).toEqual(['A-1a']);
+  });
+
+  it('keeps the status counts in sync with live status changes', () => {
+    const total = component.floorplan.buildings
+      .flatMap((b) => b.rows)
+      .reduce((n, r) => n + r.seats.length, 0);
+    expect(component.statusCounts).toEqual({
+      available: total - 6,
+      reserved: 5,
+      locked: 1,
+    });
+
+    component.onStatusesChanged({
+      changes: { 's-a-1a': null, 's-a-3a': 'reserved' },
+      replaced: false,
+    });
+    expect(component.statusCounts).toEqual({
+      available: total - 6,
+      reserved: 5,
+      locked: 1,
+    });
+
+    component.onStatusesChanged({
+      changes: { 's-a-1a': 'locked' },
+      replaced: true,
+    });
+    expect(component.statusCounts).toEqual({
+      available: total - 1,
+      reserved: 0,
+      locked: 1,
+    });
   });
 });

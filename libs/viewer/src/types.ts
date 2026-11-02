@@ -8,6 +8,12 @@ import type {
   RenderSeatContext,
   SelectedStyle,
 } from '@open-seats/renderer';
+import type {
+  StatusChanges,
+  StatusConnectionState,
+  StatusSource,
+  StatusUpdateOptions,
+} from './live/status-source';
 
 export type { RenderSeatContext, SelectedStyle, HoverStyle };
 
@@ -35,6 +41,26 @@ export interface ViewerEvents {
   };
   floorplanLoaded: Floorplan;
   violationsUpdated: Violation[];
+  /** Seat statuses changed (manually or from a live source). */
+  statusesChanged: { changes: StatusChanges; replaced: boolean };
+  /**
+   * Selected seats became unselectable (e.g. booked by someone else) and were
+   * removed from the selection. `selectionChanged` is emitted as well.
+   */
+  selectionInvalidated: {
+    seatIds: string[];
+    seats: RenderSeatContext[];
+    reason: 'status';
+  };
+  /**
+   * Connection state of the live status source. `state` is null when the
+   * source is removed (`setStatusSource(null)` or replaced by one that has not
+   * reported yet). Re-emitted when the state is unchanged but `error` differs.
+   */
+  connectionStateChanged: {
+    state: StatusConnectionState | null;
+    error?: unknown;
+  };
 }
 
 export interface ViewerOptions {
@@ -53,13 +79,37 @@ export interface ViewerOptions {
   enableKeyboardNavigation?: boolean;
   /** Render the floorplan's background image. Defaults to true. */
   showBackground?: boolean;
+  /**
+   * Live status updates for the floorplan, e.g. `socketIoStatusSource(socket)`.
+   * Subscribed in a microtask after creation, so listeners added right after
+   * `createViewer` receive its first events.
+   */
+  statusSource?: StatusSource;
 }
 
 export interface ViewerInstance {
   load(floorplan: Floorplan): void;
   getFloorplan(): Floorplan | null;
   setStatus(seatId: string, statusKey: string): void;
-  setStatuses(statuses: Record<string, string>): void;
+  /** Merges statuses. A `null` value clears a seat back to the default status. */
+  setStatuses(statuses: StatusChanges): void;
+  /** Replaces all statuses. Seats not listed get the default status. */
+  applyStatusSnapshot(
+    statuses: Record<string, string>,
+    options?: StatusUpdateOptions
+  ): void;
+  /**
+   * Merges changed statuses. Returns false (and does nothing) when
+   * `options.revision` is not newer than the last applied revision.
+   */
+  applyStatusPatch(
+    changes: StatusChanges,
+    options?: StatusUpdateOptions
+  ): boolean;
+  /** Connects a live status source, replacing any previous one. */
+  setStatusSource(source: StatusSource | null): void;
+  /** Live source state, or null when no source is connected. */
+  getConnectionState(): StatusConnectionState | null;
   getStatus(seatId: string): string;
   selectSeats(seatIds: string[]): void;
   deselectSeats(seatIds: string[]): void;

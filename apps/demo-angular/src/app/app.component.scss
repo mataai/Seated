@@ -296,6 +296,28 @@
   }
 }
 
+.live-dot {
+  background: #71717a;
+
+  &.live-dot-live {
+    background: #4caf50;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.25);
+  }
+  &.live-dot-connecting {
+    background: #f59e0b;
+  }
+}
+
+.live-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #a1a1aa;
+
+  code {
+    font-size: 11px;
+  }
+}
+
 .count {
   color: #a1a1aa;
   font-size: 11px;

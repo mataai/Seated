@@ -717,28 +717,49 @@ export class KonvaRenderer implements Renderer {
 
   public setStatus(seatId: string, statusKey: string): void {
     this.seatStatuses.set(seatId, statusKey);
-    const circle = this.seatCircles.get(seatId);
-    if (circle) {
-      const statusDef = this.statusRegistry.get(statusKey);
-      const isSelected = this.selectedSeatIds.has(seatId);
-      const isHovered = this.hoveredSeatId === seatId;
-      this.applySeatStyle(circle, statusDef, isSelected, isHovered);
+    if (this.restyleSeat(seatId)) {
       this.sceneLayer.batchDraw();
     }
   }
 
-  public setStatuses(statuses: Record<string, string>): void {
+  /**
+   * Applies status changes. A `null` value clears the seat back to the default
+   * status. With `replace`, every seat not listed is also cleared.
+   */
+  public setStatuses(
+    statuses: Record<string, string | null>,
+    options: { replace?: boolean } = {}
+  ): void {
+    const touched = new Set<string>();
+    if (options.replace) {
+      for (const seatId of this.seatStatuses.keys()) touched.add(seatId);
+      this.seatStatuses.clear();
+    }
     for (const [seatId, key] of Object.entries(statuses)) {
-      this.seatStatuses.set(seatId, key);
-      const circle = this.seatCircles.get(seatId);
-      if (circle) {
-        const statusDef = this.statusRegistry.get(key);
-        const isSelected = this.selectedSeatIds.has(seatId);
-        const isHovered = this.hoveredSeatId === seatId;
-        this.applySeatStyle(circle, statusDef, isSelected, isHovered);
+      if (key === null) {
+        this.seatStatuses.delete(seatId);
+      } else {
+        this.seatStatuses.set(seatId, key);
       }
+      touched.add(seatId);
+    }
+    for (const seatId of touched) {
+      this.restyleSeat(seatId);
     }
     this.sceneLayer.batchDraw();
+  }
+
+  /** Re-applies the style of one seat. Returns false if it isn't rendered. */
+  private restyleSeat(seatId: string): boolean {
+    const circle = this.seatCircles.get(seatId);
+    if (!circle) return false;
+    this.applySeatStyle(
+      circle,
+      this.statusRegistry.get(this.getStatus(seatId)),
+      this.selectedSeatIds.has(seatId),
+      this.hoveredSeatId === seatId
+    );
+    return true;
   }
 
   public getStatus(seatId: string): string {
