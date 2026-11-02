@@ -81,7 +81,14 @@ export interface Renderer {
   refreshBackground?(floorplan: Floorplan): void;
   getFloorplan(): Floorplan | null;
   setStatus(seatId: string, statusKey: string): void;
-  setStatuses(statuses: Record<string, string>): void;
+  /**
+   * Applies status changes. A `null` value clears the seat back to the default
+   * status. With `replace`, every seat not listed is also cleared.
+   */
+  setStatuses(
+    statuses: Record<string, string | null>,
+    options?: { replace?: boolean }
+  ): void;
   getStatus(seatId: string): string;
   selectSeats(seatIds: string[]): void;
   deselectSeats(seatIds: string[]): void;

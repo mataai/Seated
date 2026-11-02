@@ -54,6 +54,10 @@
             [floorplan]="floorplan"
             [statuses]="statuses"
             [maxSelectable]="6"
+            [statusSource]="statusSource"
+            (statusesChanged)="onStatusesChanged($event)"
+            (connectionStateChanged)="onConnectionStateChanged($event)"
+            (selectionInvalidated)="onSelectionInvalidated($event)"
             (selectionChanged)="onSelectionChanged($event)"
             (seatSelected)="onSeatSelected($event)"
             (seatDeselected)="onSeatDeselected($event)"
@@ -87,6 +91,40 @@
         </div>
 
         <div class="panel-body">
+          @if (liveAvailable) {
+            <div class="card live-card">
+              <div class="card-title">LIVE UPDATES</div>
+              <div class="legend-row">
+                <div class="legend-left">
+                  <span
+                    class="dot live-dot"
+                    [class.live-dot-live]="liveState === 'live'"
+                    [class.live-dot-connecting]="liveState === 'connecting'"
+                  ></span>
+                  <span>
+                    @if (!liveEnabled) {
+                      Off
+                    } @else if (liveState === 'live') {
+                      Live
+                    } @else if (liveState === 'offline') {
+                      Offline
+                    } @else {
+                      Connecting…
+                    }
+                  </span>
+                </div>
+                <button class="btn" (click)="setLive(!liveEnabled)">
+                  {{ liveEnabled ? 'Turn off' : 'Turn on' }}
+                </button>
+              </div>
+              @if (liveEnabled && liveState !== 'live') {
+                <div class="live-hint">
+                  Start the server with <code>npm run start:live-server</code>
+                </div>
+              }
+            </div>
+          }
+
           <div class="card legend-card">
             <div class="card-title">STATUS PALETTE</div>
             <div class="legend-row">
@@ -94,7 +132,7 @@
                 <span class="dot dot-available"></span>
                 <span>Available</span>
               </div>
-              <span class="count">Selectable</span>
+              <span class="count">{{ statusCounts['available'] }}</span>
             </div>
             <div class="legend-row">
               <div class="legend-left">
@@ -108,14 +146,14 @@
                 <span class="dot dot-reserved"></span>
                 <span>Reserved</span>
               </div>
-              <span class="count">Unavailable</span>
+              <span class="count">{{ statusCounts['reserved'] }}</span>
             </div>
             <div class="legend-row">
               <div class="legend-left">
                 <span class="dot dot-locked"></span>
                 <span>Locked</span>
               </div>
-              <span class="count">Admin</span>
+              <span class="count">{{ statusCounts['locked'] }}</span>
             </div>
           </div>
 

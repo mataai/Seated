@@ -26,6 +26,7 @@ An open-source, framework-agnostic JavaScript/TypeScript suite for **interactive
 - [Key Features](#key-features)
   - [Editor Features](#editor-features)
   - [Viewer Features](#viewer-features)
+  - [Live Seat Updates](#live-seat-updates)
   - [Accessibility & Keyboard Shortcuts](#accessibility--keyboard-shortcuts)
   - [Layout Invariants & Validation](#layout-invariants--validation)
 - [API & Options Reference](#api--options-reference)
@@ -219,6 +220,42 @@ export class BookingComponent {
 - **Status Registry**: Map seat statuses (e.g. `available`, `reserved`, `locked`, `vip`) with custom colors and selectable flags.
 - **Async Tooltips**: Built-in debounced tooltip resolver supporting async data fetching (e.g., live pricing or seat views).
 - **Navigation**: Touch pinch-to-zoom, mouse wheel zoom, pan dragging, and keyboard navigation.
+- **Live Updates**: Seat statuses update in real time over Socket.IO; seats booked by someone else are released from the user's selection.
+
+### Live Seat Updates
+
+A viewer shows one floorplan and receives status updates for the whole floorplan over Socket.IO. The app creates the socket (URL, auth, path), so the library has no Socket.IO dependency and never handles credentials:
+
+```ts
+import { io } from 'socket.io-client'; // v4
+import { createViewer, socketIoStatusSource } from '@open-seats/viewer';
+
+const socket = io('https://api.example.com', {
+  auth: { floorplanId: 'grand-hall', token },
+});
+
+const viewer = createViewer(container, {
+  floorplan,
+  statusSource: socketIoStatusSource(socket),
+});
+
+viewer.on('connectionStateChanged', ({ state, error }) => {
+  // 'connecting' | 'live' | 'offline', or null once the source is removed
+});
+viewer.on('selectionInvalidated', ({ seats }) => {
+  // These seats were just taken and removed from the selection.
+});
+```
+
+- On every (re)connect the viewer receives a full snapshot, so missed updates are never lost. Reconnection, back-off and the long-polling fallback come from Socket.IO.
+- If the snapshot request fails (an error reply, or no reply within `syncTimeoutMs`, 10 s by default), the state goes to `offline` with the `error`, and patches are ignored until the next reconnect syncs successfully: `socketIoStatusSource(socket, { syncTimeoutMs: 5000 })`.
+- A `statusSource` passed to `createViewer` is subscribed right after the constructor returns, so listeners you attach straight after creation receive its first events (such as `connecting`).
+- `connectionStateChanged` fires when the state changes, when the error changes while the state stays the same (e.g. a new `connect_error`), and with `state: null` when `setStatusSource(null)` removes the source.
+- Selected seats whose new status is not `selectable` are deselected automatically and announced to screen readers. This also applies to `setStatus` / `setStatuses`.
+- Reserving or holding a seat is still your own API call; the server then broadcasts the change to every viewer.
+- Any other transport can implement `StatusSource` (`subscribe(sink) => unsubscribe`), or call `applyStatusSnapshot` / `applyStatusPatch` directly.
+
+Reference servers for Node.js and Python, and the wire protocol, are in [`servers/`](./servers/README.md).
 
 ### Accessibility & Keyboard Shortcuts
 
@@ -264,16 +301,17 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
 
 #### `ViewerOptions`
 
-| Option                     | Type                     | Description                                                             |
-| :------------------------- | :----------------------- | :---------------------------------------------------------------------- |
-| `floorplan`                | `Floorplan`              | The floorplan JSON object to render.                                    |
-| `statuses`                 | `Record<string, string>` | Map of seat IDs to status names (e.g. `'reserved'`, `'booked'`).        |
-| `statusDefinitions`        | `SeatStatusDefinition[]` | Custom status configurations (colors, selectability).                   |
-| `maxSelectable`            | `number`                 | Maximum number of seats selectable simultaneously.                      |
-| `selectedSeatIds`          | `string[]`               | Initial pre-selected seat IDs.                                          |
-| `tooltipProvider`          | `TooltipProvider`        | Async function returning tooltip title, subtitle, or content.           |
-| `tooltipDebounceMs`        | `number`                 | Debounce delay in ms before showing tooltip (default: `150`).           |
-| `enableKeyboardNavigation` | `boolean`                | Enable spatial 2D arrow navigation and accessibility (default: `true`). |
+| Option                     | Type                     | Description                                                                                |
+| :------------------------- | :----------------------- | :----------------------------------------------------------------------------------------- |
+| `floorplan`                | `Floorplan`              | The floorplan JSON object to render.                                                       |
+| `statuses`                 | `Record<string, string>` | Map of seat IDs to status names (e.g. `'reserved'`, `'booked'`).                           |
+| `statusDefinitions`        | `SeatStatusDefinition[]` | Custom status configurations (colors, selectability).                                      |
+| `maxSelectable`            | `number`                 | Maximum number of seats selectable simultaneously.                                         |
+| `selectedSeatIds`          | `string[]`               | Initial pre-selected seat IDs.                                                             |
+| `tooltipProvider`          | `TooltipProvider`        | Async function returning tooltip title, subtitle, or content.                              |
+| `tooltipDebounceMs`        | `number`                 | Debounce delay in ms before showing tooltip (default: `150`).                              |
+| `enableKeyboardNavigation` | `boolean`                | Enable spatial 2D arrow navigation and accessibility (default: `true`).                    |
+| `statusSource`             | `StatusSource`           | Live status updates, e.g. `socketIoStatusSource(socket)`. Subscribed right after creation. |
 
 #### `ViewerEvents`
 
@@ -283,6 +321,9 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
 - `selectionChanged`: Emitted whenever the selection changes, providing `selectedSeatIds` and `selectedSeats`.
 - `floorplanLoaded`: Emitted when a new floorplan JSON is loaded.
 - `violationsUpdated`: Emitted when layout violations are detected.
+- `statusesChanged`: Emitted with `{ changes, replaced }` whenever seat statuses change.
+- `selectionInvalidated`: Emitted with `{ seatIds, seats, reason }` when selected seats became unavailable and were deselected.
+- `connectionStateChanged`: Emitted with `{ state, error? }` when the live status source connects, reconnects or goes offline, when its error changes, and with `state: null` when the source is removed.
 
 ---
 
@@ -324,6 +365,7 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
   - `[statuses]`: `Record<string, string>`
   - `[maxSelectable]`: `number`
   - `[options]`: `Partial<ViewerOptions>`
+  - `[statusSource]`: `StatusSource | null`. Takes precedence over `options.statusSource`. Once this input has been given a value (including `null` to disconnect), `options.statusSource` is never used, so a custom source is never swapped for another one. Changes to `options.statusSource` apply only while this input is unused.
 - **Outputs**:
   - `(ready)`
   - `(seatHovered)`
@@ -333,6 +375,10 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
   - `(selectionChanged)`
   - `(floorplanLoaded)`
   - `(violationsUpdated)`
+  - `(statusesChanged)`
+  - `(selectionInvalidated)`
+  - `(connectionStateChanged)`
+- Outputs fired by a single live update (e.g. `statusesChanged`, `seatDeselected`, `selectionInvalidated`, `selectionChanged`) are emitted together in one `NgZone.run`, so each update costs one change-detection pass.
 
 #### `<seats-editor>`
 

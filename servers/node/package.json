@@ -1,0 +1,12 @@
+{
+  "name": "open-seats-live-server-node",
+  "private": true,
+  "description": "Reference Socket.IO server for OpenSeats live seat updates.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  }
+}

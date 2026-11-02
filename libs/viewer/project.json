@@ -3,5 +3,6 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/viewer/src",
   "projectType": "library",
-  "tags": ["layer:viewer"]
+  "tags": ["layer:viewer"],
+  "implicitDependencies": ["open-seats-live-server-node"]
 }

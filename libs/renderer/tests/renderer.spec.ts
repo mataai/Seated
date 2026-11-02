@@ -145,6 +145,25 @@ describe('Renderer (KonvaRenderer)', () => {
     expect(renderer.getStatus('s-2')).toBe('reserved');
   });
 
+  it('clears statuses with null and replaces the whole map', () => {
+    renderer = createRenderer({
+      container,
+      floorplan: testFloorplan,
+      statuses: { 's-1': 'reserved', 's-2': 'locked' },
+    });
+
+    renderer.setStatuses({ 's-1': null });
+    expect(renderer.getStatus('s-1')).toBe('available');
+    expect(renderer.getStatus('s-2')).toBe('locked');
+
+    renderer.setStatuses({ 's-1': 'reserved' }, { replace: true });
+    expect(renderer.getStatus('s-1')).toBe('reserved');
+    expect(renderer.getStatus('s-2')).toBe('available');
+    // The cleared seat is restyled, not just forgotten.
+    const circle2 = (renderer as any).seatCircles.get('s-2');
+    expect(circle2.fill()).toBe('#4caf50');
+  });
+
   it('handles zoom and pan controls', () => {
     renderer = createRenderer({
       container,

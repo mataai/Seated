@@ -14,6 +14,12 @@ import {
   type RenderSeatContext,
 } from '@open-seats/renderer';
 import { TooltipManager } from './tooltip';
+import type {
+  StatusChanges,
+  StatusConnectionState,
+  StatusSource,
+  StatusUpdateOptions,
+} from './live/status-source';
 import type { ViewerEvents, ViewerInstance, ViewerOptions } from './types';
 
 export class Viewer implements ViewerInstance {
@@ -29,6 +35,13 @@ export class Viewer implements ViewerInstance {
   private maxSelectable?: number;
   private enableKeyboardNavigation: boolean;
   private liveRegion: HTMLDivElement;
+  /** Revision of the last applied snapshot/patch, if the source sends them. */
+  private statusRevision?: number;
+  private stopStatusSource?: () => void;
+  private connectionState: StatusConnectionState | null = null;
+  private connectionError: unknown = undefined;
+  /** Source from `options.statusSource`, connected once the constructor returns. */
+  private pendingStatusSource?: StatusSource;
 
   constructor(container: HTMLElement, options: ViewerOptions = {}) {
     this.container = container;
@@ -107,6 +120,16 @@ export class Viewer implements ViewerInstance {
 
     if (options.floorplan) {
       this.load(options.floorplan);
+    }
+
+    if (options.statusSource) {
+      // Subscribe after the constructor returns so listeners attached right
+      // after creation receive the source's first events (e.g. 'connecting').
+      const source = options.statusSource;
+      this.pendingStatusSource = source;
+      queueMicrotask(() => {
+        if (this.pendingStatusSource === source) this.setStatusSource(source);
+      });
     }
   }
 
@@ -380,11 +403,126 @@ export class Viewer implements ViewerInstance {
   }
 
   public setStatus(seatId: string, statusKey: string): void {
-    this.renderer.setStatus(seatId, statusKey);
+    this.setStatuses({ [seatId]: statusKey });
   }
 
-  public setStatuses(statuses: Record<string, string>): void {
-    this.renderer.setStatuses(statuses);
+  public setStatuses(statuses: StatusChanges): void {
+    this.updateStatuses(statuses, false);
+  }
+
+  public applyStatusSnapshot(
+    statuses: Record<string, string>,
+    options: StatusUpdateOptions = {}
+  ): void {
+    // A snapshot is authoritative: it also resets revision ordering.
+    this.statusRevision = options.revision;
+    this.updateStatuses(statuses, true);
+  }
+
+  public applyStatusPatch(
+    changes: StatusChanges,
+    options: StatusUpdateOptions = {}
+  ): boolean {
+    const { revision } = options;
+    if (revision !== undefined) {
+      if (
+        this.statusRevision !== undefined &&
+        revision <= this.statusRevision
+      ) {
+        return false;
+      }
+      this.statusRevision = revision;
+    }
+    this.updateStatuses(changes, false);
+    return true;
+  }
+
+  public setStatusSource(source: StatusSource | null): void {
+    const previousState = this.connectionState;
+    this.disconnectStatusSource();
+    if (source) {
+      // Calls from a replaced source are dropped.
+      let active = true;
+      const stop = source.subscribe({
+        snapshot: (statuses, revision) => {
+          if (active) this.applyStatusSnapshot(statuses, { revision });
+        },
+        patch: (changes, revision) => {
+          if (active) this.applyStatusPatch(changes, { revision });
+        },
+        connectionState: (state, error) => {
+          if (!active) return;
+          if (
+            state === this.connectionState &&
+            error === this.connectionError
+          ) {
+            return;
+          }
+          this.connectionState = state;
+          this.connectionError = error;
+          this.emitter.emit('connectionStateChanged', { state, error });
+        },
+      });
+      this.stopStatusSource = () => {
+        active = false;
+        stop();
+      };
+    }
+    // Report the disconnect unless the new source already reported a state.
+    if (previousState !== null && this.connectionState === null) {
+      this.emitter.emit('connectionStateChanged', { state: null });
+    }
+  }
+
+  private disconnectStatusSource(): void {
+    this.pendingStatusSource = undefined;
+    this.stopStatusSource?.();
+    this.stopStatusSource = undefined;
+    this.statusRevision = undefined;
+    this.connectionState = null;
+    this.connectionError = undefined;
+  }
+
+  public getConnectionState(): StatusConnectionState | null {
+    return this.connectionState;
+  }
+
+  private updateStatuses(changes: StatusChanges, replace: boolean): void {
+    this.renderer.setStatuses(changes, { replace });
+    this.emitter.emit('statusesChanged', { changes, replaced: replace });
+    this.releaseUnavailableSelection();
+  }
+
+  /** Deselects selected seats whose status no longer allows selection. */
+  private releaseUnavailableSelection(): void {
+    const unavailable = this.renderer
+      .getSelectedSeatIds()
+      .filter(
+        (id) => !this.statusRegistry.get(this.renderer.getStatus(id)).selectable
+      );
+    if (unavailable.length === 0) return;
+
+    const seats = unavailable
+      .map((id) => this.seatContextMap.get(id))
+      .filter((c): c is RenderSeatContext => c !== undefined);
+
+    this.renderer.deselectSeats(unavailable);
+    for (const ctx of seats) {
+      this.emitter.emit('seatDeselected', ctx);
+    }
+    this.emitter.emit('selectionInvalidated', {
+      seatIds: unavailable,
+      seats,
+      reason: 'status',
+    });
+    this.emitSelectionChanged();
+
+    const labels = seats.map((ctx) => ctx.seat.label).join(', ');
+    this.announce(
+      seats.length === 1
+        ? `Seat ${labels} is no longer available and was removed from your selection.`
+        : `Seats ${labels} are no longer available and were removed from your selection.`
+    );
   }
 
   public getStatus(seatId: string): string {
@@ -463,6 +601,7 @@ export class Viewer implements ViewerInstance {
   }
 
   public destroy(): void {
+    this.disconnectStatusSource();
     if (this.enableKeyboardNavigation) {
       this.container.removeEventListener('keydown', this.onKeyDown);
     }
