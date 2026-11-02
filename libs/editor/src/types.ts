@@ -8,6 +8,12 @@ import type {
   Violation,
   Zone,
 } from '@open-seats/core';
+import type {
+  BackgroundLoadOptions,
+  LoadedBackgroundResult,
+} from './background/background-loader';
+
+export type { BackgroundLoadOptions, LoadedBackgroundResult };
 
 export type ToolType =
   'select' | 'pan' | 'building' | 'row' | 'zone' | 'add-seat';
@@ -67,6 +73,15 @@ export interface EditorInstance {
   togglePreview(enabled?: boolean): boolean;
   isPreview(): boolean;
   setBackground(bg: FloorplanBackground | undefined): void;
+  getBackground(): FloorplanBackground | undefined;
+  updateBackground(
+    updates: Partial<FloorplanBackground>,
+    options?: { merge?: boolean }
+  ): void;
+  loadBackgroundFromFile(
+    file: File,
+    options?: BackgroundLoadOptions
+  ): Promise<LoadedBackgroundResult>;
   setGridSnapping(enabled: boolean, size?: number): void;
   isGridSnappingEnabled(): boolean;
   getSelectedNodeIds(): string[];

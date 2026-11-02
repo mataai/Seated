@@ -1,4 +1,18 @@
-<div class="seats-editor-layout">
+<!--
+  Native `change` events from the inputs inside this template must not bubble
+  to the host element, where they would reach listeners bound to the
+  component's `(change)` output.
+-->
+<div class="seats-editor-layout" (change)="$event.stopPropagation()">
+  <!-- Hidden Blueprint File Input -->
+  <input
+    #bgFileInput
+    type="file"
+    accept="image/*,.pdf"
+    (change)="onBackgroundFileSelected($event)"
+    style="display: none"
+  />
+
   <!-- 1. LEFT PANEL: TOOLS & EDITIONS -->
   @if (showToolbar()) {
     <aside
@@ -76,6 +90,103 @@
           >
             {{ isPreviewActive ? 'Exit Preview' : 'Preview Mode' }}
           </button>
+
+          <!-- Blueprint Quick Bar -->
+          <div class="blueprint-quick-row">
+            <button
+              class="btn blueprint-quick-btn"
+              [class.has-blueprint]="!!currentBackground"
+              [disabled]="isUploadingBackground"
+              (click)="triggerFileInput()"
+              [title]="
+                currentBackground
+                  ? 'Replace or change reference floorplan blueprint'
+                  : 'Upload reference floorplan image or PDF'
+              "
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <span>{{
+                isUploadingBackground
+                  ? 'Uploading...'
+                  : currentBackground
+                    ? 'Replace Blueprint'
+                    : 'Upload Blueprint'
+              }}</span>
+            </button>
+            @if (currentBackground) {
+              <button
+                class="btn blueprint-icon-btn"
+                [class.active]="currentBackground.visible !== false"
+                (click)="toggleBackgroundVisibility()"
+                [title]="
+                  currentBackground.visible !== false
+                    ? 'Hide Blueprint'
+                    : 'Show Blueprint'
+                "
+                aria-label="Toggle Blueprint Visibility"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  @if (currentBackground.visible !== false) {
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  } @else {
+                    <path
+                      d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                    />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  }
+                </svg>
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- Floorplan Import -->
+        <div class="panel-section">
+          <div class="section-title">Floorplan</div>
+          <input
+            #floorplanFileInput
+            type="file"
+            accept=".json,application/json"
+            (change)="onFloorplanFileSelected($event)"
+            style="display: none"
+          />
+          <button
+            class="btn"
+            style="width: 100%"
+            [disabled]="isImportingFloorplan"
+            (click)="triggerFloorplanImport()"
+            title="Replace the current floorplan with one from a JSON file"
+          >
+            {{ isImportingFloorplan ? 'Importing...' : 'Import Floorplan' }}
+          </button>
+          @if (floorplanImportError) {
+            <div class="upload-error-box" role="alert">
+              {{ floorplanImportError }}
+            </div>
+          }
         </div>
 
         <!-- 2. Edit & History -->
@@ -1220,8 +1331,282 @@
           </div>
         }
 
-        <!-- 4. NO SELECTION: Floorplan Overview -->
+        <!-- 4. NO SELECTION: Blueprint & Floorplan Overview -->
         @if (!selectedNodeId) {
+          <!-- REFERENCE BLUEPRINT / BACKGROUND FLOORPLAN -->
+          <div class="card prop-card blueprint-card">
+            <div class="prop-card-header">
+              <div class="prop-title">Floorplan Blueprint</div>
+              @if (currentBackground) {
+                <span class="badge blueprint-badge">
+                  {{ currentBackground.totalPages ? 'PDF' : 'IMAGE' }}
+                </span>
+              }
+            </div>
+
+            <!-- Upload dropzone when no background is loaded -->
+            @if (!currentBackground) {
+              <div
+                class="blueprint-dropzone"
+                [class.is-uploading]="isUploadingBackground"
+                (click)="triggerFileInput()"
+                (dragover)="onBackgroundDragOver($event)"
+                (drop)="onBackgroundFileDrop($event)"
+              >
+                <div class="dropzone-icon">
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </div>
+                <div class="dropzone-title">
+                  {{
+                    isUploadingBackground
+                      ? 'Processing blueprint...'
+                      : 'Upload Floorplan Blueprint'
+                  }}
+                </div>
+                <div class="dropzone-hint">
+                  Drop or select a <strong>PNG, JPG, SVG</strong> or
+                  <strong>PDF</strong> file to trace your buildings and rows.
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  style="margin-top: 10px; width: 100%"
+                  [disabled]="isUploadingBackground"
+                  (click)="$event.stopPropagation(); triggerFileInput()"
+                >
+                  {{ isUploadingBackground ? 'Uploading...' : 'Choose File' }}
+                </button>
+              </div>
+            } @else {
+              <!-- Background controls when background is loaded -->
+              <div class="blueprint-loaded-view">
+                <div class="blueprint-info-row">
+                  <div class="blueprint-filename-box">
+                    <span class="file-icon">{{
+                      currentBackground.totalPages ? '📄' : '🖼️'
+                    }}</span>
+                    <span
+                      class="file-name"
+                      [title]="
+                        currentBackground.filename || 'Uploaded Blueprint'
+                      "
+                    >
+                      {{ currentBackground.filename || 'Blueprint' }}
+                    </span>
+                  </div>
+                  <button
+                    class="btn btn-sm btn-danger"
+                    (click)="removeBackground()"
+                    title="Remove blueprint"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                <!-- PDF Multi-page navigation -->
+                @if (
+                  currentBackground.totalPages &&
+                  currentBackground.totalPages > 1
+                ) {
+                  <div class="blueprint-page-bar">
+                    <span class="page-label">PDF Page:</span>
+                    <div class="pagination-controls">
+                      <button
+                        class="page-nav-btn"
+                        [disabled]="
+                          isUploadingBackground ||
+                          (currentBackground.pageNumber || 1) <= 1
+                        "
+                        (click)="
+                          changePdfPage((currentBackground.pageNumber || 1) - 1)
+                        "
+                        title="Previous page"
+                      >
+                        ◀
+                      </button>
+                      <span class="page-indicator">
+                        {{ currentBackground.pageNumber || 1 }} /
+                        {{ currentBackground.totalPages }}
+                      </span>
+                      <button
+                        class="page-nav-btn"
+                        [disabled]="
+                          isUploadingBackground ||
+                          (currentBackground.pageNumber || 1) >=
+                            currentBackground.totalPages
+                        "
+                        (click)="
+                          changePdfPage((currentBackground.pageNumber || 1) + 1)
+                        "
+                        title="Next page"
+                      >
+                        ▶
+                      </button>
+                    </div>
+                  </div>
+                }
+
+                <!-- Visibility and Lock Toggles -->
+                <div class="toggle-group" style="margin-top: 8px">
+                  <button
+                    class="toggle-btn"
+                    [class.active]="currentBackground.visible !== false"
+                    (click)="toggleBackgroundVisibility()"
+                    title="Toggle canvas visibility"
+                  >
+                    {{
+                      currentBackground.visible !== false
+                        ? '👁️ Visible'
+                        : '👁️‍🗨️ Hidden'
+                    }}
+                  </button>
+                  <button
+                    class="toggle-btn"
+                    [class.active]="currentBackground.locked ?? true"
+                    (click)="toggleBackgroundLocked()"
+                    title="Toggle blueprint lock (when locked, clicks pass through to shapes)"
+                  >
+                    {{
+                      (currentBackground.locked ?? true)
+                        ? '🔒 Locked'
+                        : '🔓 Draggable'
+                    }}
+                  </button>
+                </div>
+
+                <!-- Opacity Slider -->
+                <div class="form-group" style="margin-top: 8px">
+                  <div class="form-label-row">
+                    <label class="form-label">Opacity</label>
+                    <span class="slider-value">
+                      {{
+                        Math.round((currentBackground.opacity ?? 0.6) * 100)
+                      }}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    class="form-range"
+                    min="5"
+                    max="100"
+                    step="5"
+                    [value]="
+                      Math.round((currentBackground.opacity ?? 0.6) * 100)
+                    "
+                    (input)="setBackgroundOpacity(+$any($event.target).value)"
+                  />
+                </div>
+
+                <!-- Scale Slider -->
+                <div class="form-group">
+                  <div class="form-label-row">
+                    <label class="form-label">Scale</label>
+                    <span class="slider-value">
+                      <input
+                        type="number"
+                        class="scale-input"
+                        min="0.01"
+                        step="0.1"
+                        aria-label="Blueprint scale"
+                        [value]="currentBackground.scale ?? 1"
+                        (input)="setBackgroundScale(+$any($event.target).value)"
+                      />x
+                    </span>
+                  </div>
+                  <!-- Logarithmic: 0.1x to ~31.6x, fine-grained at low scales -->
+                  <input
+                    type="range"
+                    class="form-range"
+                    [min]="BACKGROUND_SCALE_LOG_MIN"
+                    [max]="BACKGROUND_SCALE_LOG_MAX"
+                    step="0.01"
+                    [value]="backgroundScaleSliderValue"
+                    (input)="
+                      setBackgroundScaleFromSlider(+$any($event.target).value)
+                    "
+                  />
+                </div>
+
+                <!-- Position X & Y -->
+                <div class="form-row">
+                  <div class="form-group" style="flex: 1">
+                    <label class="form-label">Offset X</label>
+                    <input
+                      type="number"
+                      class="form-input"
+                      [value]="currentBackground.position?.x ?? 0"
+                      (input)="
+                        setBackgroundPosition(
+                          +$any($event.target).value,
+                          currentBackground.position?.y ?? 0
+                        )
+                      "
+                    />
+                  </div>
+                  <div class="form-group" style="flex: 1">
+                    <label class="form-label">Offset Y</label>
+                    <input
+                      type="number"
+                      class="form-input"
+                      [value]="currentBackground.position?.y ?? 0"
+                      (input)="
+                        setBackgroundPosition(
+                          currentBackground.position?.x ?? 0,
+                          +$any($event.target).value
+                        )
+                      "
+                    />
+                  </div>
+                </div>
+
+                <!-- Alignment & Replace Actions -->
+                <div class="btn-group" style="margin-top: 6px">
+                  <button
+                    class="btn"
+                    style="flex: 1"
+                    (click)="fitBackgroundToCanvas()"
+                    title="Fit blueprint to canvas dimensions"
+                  >
+                    Fit to Canvas
+                  </button>
+                  <button
+                    class="btn"
+                    style="flex: 1"
+                    (click)="triggerFileInput()"
+                    title="Upload a different floorplan image or PDF"
+                  >
+                    Replace File
+                  </button>
+                </div>
+              </div>
+            }
+
+            @if (backgroundUploadError) {
+              <div class="upload-error-box">
+                {{ backgroundUploadError }}
+              </div>
+            }
+
+            <p class="blueprint-note">
+              Reference floorplan is only visible in the editor to guide
+              building and row placement, and is not shown in the customer
+              viewer.
+            </p>
+          </div>
+
           <div class="card">
             <div class="card-title">FLOORPLAN OVERVIEW</div>
             <div class="stats-grid">

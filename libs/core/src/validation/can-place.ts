@@ -30,6 +30,7 @@ export interface ProposedTransform {
   seatSpacing?: number;
   seatRadius?: number;
   tableWidth?: number;
+  tableLength?: number;
   seats?: Seat[];
 }
 

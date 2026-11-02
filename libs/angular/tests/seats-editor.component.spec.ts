@@ -356,4 +356,201 @@ describe('SeatsEditorComponent', () => {
     expect(leftSidebar.classList.contains('collapsed')).toBe(true);
     expect(rightSidebar.classList.contains('collapsed')).toBe(true);
   });
+
+  describe('Floorplan import', () => {
+    const importedPlan = {
+      schemaVersion: 1,
+      dimensions: { width: 1000, height: 700 },
+      buildings: [
+        {
+          id: 'imported-b',
+          label: 'Imported Hall',
+          position: { x: 10, y: 10 },
+          rotation: 0,
+          points: [
+            { x: 0, y: 0 },
+            { x: 300, y: 0 },
+            { x: 300, y: 200 },
+            { x: 0, y: 200 },
+          ],
+          zones: [],
+          rows: [],
+        },
+      ],
+    };
+    const jsonFile = (content: string, name = 'plan.json') =>
+      new File([content], name, { type: 'application/json' });
+
+    beforeEach(() => {
+      fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+      fixture.detectChanges();
+    });
+
+    it('shows an Import Floorplan button in the left panel', () => {
+      const buttons = Array.from(
+        fixture.nativeElement.querySelectorAll('.editor-left-panel button')
+      ) as HTMLButtonElement[];
+      expect(
+        buttons.some((b) => b.textContent?.includes('Import Floorplan'))
+      ).toBe(true);
+    });
+
+    it('replaces the plan after confirmation and emits floorplanChange', async () => {
+      vi.spyOn(component as any, 'confirmReplace').mockReturnValue(true);
+      const emitted: unknown[] = [];
+      component.floorplanChange.subscribe((p) => emitted.push(p));
+
+      const ok = await component.importFloorplanFile(
+        jsonFile(JSON.stringify(importedPlan))
+      );
+
+      expect(ok).toBe(true);
+      expect(component.floorplanImportError).toBeNull();
+      const plan = component.getFloorplan()!;
+      expect(plan.buildings.map((b) => b.id)).toEqual(['imported-b']);
+      expect(plan.dimensions).toEqual({ width: 1000, height: 700 });
+      expect(component.canUndo()).toBe(false);
+      expect(emitted.length).toBeGreaterThan(0);
+    });
+
+    it('keeps the current plan when the user cancels', async () => {
+      vi.spyOn(component as any, 'confirmReplace').mockReturnValue(false);
+      const before = component.getFloorplan();
+      const ok = await component.importFloorplanFile(
+        jsonFile(JSON.stringify(importedPlan))
+      );
+      expect(ok).toBe(false);
+      expect(component.getFloorplan()).toEqual(before);
+    });
+
+    it('reports invalid JSON without touching the plan', async () => {
+      const before = component.getFloorplan();
+      const ok = await component.importFloorplanFile(
+        jsonFile('{ not json', 'broken.json')
+      );
+      expect(ok).toBe(false);
+      expect(component.floorplanImportError).toContain('not valid JSON');
+      expect(component.getFloorplan()).toEqual(before);
+
+      fixture.detectChanges();
+      const alert = fixture.nativeElement.querySelector(
+        '.editor-left-panel .upload-error-box'
+      );
+      expect(alert?.textContent).toContain('broken.json');
+    });
+
+    it('reports schema errors with the failing path', async () => {
+      const before = component.getFloorplan();
+      const ok = await component.importFloorplanFile(
+        jsonFile(JSON.stringify({ ...importedPlan, schemaVersion: 2 }))
+      );
+      expect(ok).toBe(false);
+      expect(component.floorplanImportError).toContain('not a valid floorplan');
+      expect(component.floorplanImportError).toContain('schemaVersion');
+      expect(component.getFloorplan()).toEqual(before);
+    });
+  });
+
+  describe('Blueprint / Background floorplan features', () => {
+    it('displays blueprint dropzone when no background is present', () => {
+      fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+      fixture.detectChanges();
+
+      const dropzone = fixture.nativeElement.querySelector(
+        '.blueprint-dropzone'
+      );
+      expect(dropzone).toBeTruthy();
+      expect(dropzone.textContent).toContain('Upload Floorplan Blueprint');
+    });
+
+    it('uploads an image blueprint, applies tracing defaults, and updates controls', async () => {
+      fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+      fixture.detectChanges();
+
+      const dummyFile = new File(['image-bytes'], 'architectural_plan.png', {
+        type: 'image/png',
+      });
+
+      await component.uploadBackgroundFile(dummyFile);
+      fixture.detectChanges();
+
+      expect(component.currentBackground).toBeDefined();
+      expect(component.currentBackground?.filename).toBe(
+        'architectural_plan.png'
+      );
+      expect(component.currentBackground?.opacity).toBe(0.6);
+      expect(component.currentBackground?.locked).toBe(true);
+      expect(component.currentBackground?.visible).toBe(true);
+
+      // Verify blueprint card displays loaded state
+      const loadedView = fixture.nativeElement.querySelector(
+        '.blueprint-loaded-view'
+      );
+      expect(loadedView).toBeTruthy();
+      expect(loadedView.textContent).toContain('architectural_plan.png');
+
+      // Test opacity adjustment
+      component.setBackgroundOpacity(40);
+      fixture.detectChanges();
+      expect(component.currentBackground?.opacity).toBe(0.4);
+
+      // Test scale adjustment
+      component.setBackgroundScale(1.5);
+      fixture.detectChanges();
+      expect(component.currentBackground?.scale).toBe(1.5);
+
+      // A native change event from an inner input must not reach the host
+      // (where it would hit `(change)` output listeners) or erase the blueprint
+      const hostChangeListener = vi.fn();
+      fixture.nativeElement.addEventListener('change', hostChangeListener);
+      const slider = fixture.nativeElement.querySelector(
+        '.blueprint-loaded-view input[type="range"]'
+      );
+      expect(slider).toBeTruthy();
+      slider.dispatchEvent(new Event('change', { bubbles: true }));
+      fixture.detectChanges();
+      expect(hostChangeListener).not.toHaveBeenCalled();
+      expect(component.currentBackground).toBeTruthy();
+      expect(component.currentBackground?.scale).toBe(1.5);
+
+      // Logarithmic scale slider reaches well beyond 3x
+      component.setBackgroundScaleFromSlider(1);
+      expect(component.currentBackground?.scale).toBe(10);
+      expect(component.backgroundScaleSliderValue).toBeCloseTo(1);
+      component.setBackgroundScaleFromSlider(
+        component.BACKGROUND_SCALE_LOG_MAX
+      );
+      expect(component.currentBackground?.scale).toBeCloseTo(31.6);
+      component.setBackgroundScale(1.5);
+
+      // Test position adjustment
+      component.setBackgroundPosition(100, 50);
+      fixture.detectChanges();
+      expect(component.currentBackground?.position).toEqual({ x: 100, y: 50 });
+
+      // Test toggle lock
+      component.toggleBackgroundLocked();
+      fixture.detectChanges();
+      expect(component.currentBackground?.locked).toBe(false);
+
+      // Test toggle visibility
+      component.toggleBackgroundVisibility();
+      fixture.detectChanges();
+      expect(component.currentBackground?.visible).toBe(false);
+
+      // Test fit to canvas
+      component.backgroundDimensions = { width: 1000, height: 600 };
+      component.fitBackgroundToCanvas();
+      fixture.detectChanges();
+      expect(component.currentBackground?.scale).toBeGreaterThan(0);
+
+      // Test remove
+      component.removeBackground();
+      fixture.detectChanges();
+      expect(component.currentBackground).toBeUndefined();
+      expect(
+        fixture.nativeElement.querySelector('.blueprint-dropzone')
+      ).toBeTruthy();
+    });
+  });
 });

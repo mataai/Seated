@@ -11,6 +11,7 @@ import {
   SeatsViewerComponent,
 } from '@open-seats/angular';
 import {
+  cloneFloorplan,
   SAMPLE_FLOORPLAN,
   type Floorplan,
   type Violation,
@@ -32,7 +33,7 @@ export class AppComponent {
   readonly viewerComp = viewChild(SeatsViewerComponent);
   readonly editorComp = viewChild(SeatsEditorComponent);
 
-  public floorplan: Floorplan = structuredClone(SAMPLE_FLOORPLAN);
+  public floorplan: Floorplan = cloneFloorplan(SAMPLE_FLOORPLAN);
   public mode: 'viewer' | 'editor' = 'viewer';
   public currentTool: ToolType = 'select';
 

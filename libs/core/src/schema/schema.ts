@@ -22,6 +22,10 @@ export const FloorplanBackgroundSchema = z
     scale: z.number().positive().optional(),
     opacity: z.number().min(0).max(1).optional(),
     locked: z.boolean().optional(),
+    visible: z.boolean().optional(),
+    filename: z.string().optional(),
+    pageNumber: z.number().int().positive().optional(),
+    totalPages: z.number().int().positive().optional(),
   })
   .passthrough();
 
@@ -135,4 +139,21 @@ export function safeParseFloorplan(
   input: unknown
 ): ReturnType<typeof FloorplanSchema.safeParse> {
   return FloorplanSchema.safeParse(input);
+}
+
+/**
+ * Safely deep-clones a floorplan or seating model.
+ * Uses native `structuredClone` when possible, with a serialization fallback
+ * that strips non-clonable properties (such as functions or DOM/framework wrappers).
+ */
+export function cloneFloorplan<T = IFloorplan>(obj: T): T {
+  try {
+    return structuredClone(obj);
+  } catch {
+    return JSON.parse(
+      JSON.stringify(obj, (_key, val) =>
+        typeof val === 'function' ? undefined : val
+      )
+    );
+  }
 }

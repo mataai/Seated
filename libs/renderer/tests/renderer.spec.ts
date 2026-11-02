@@ -258,4 +258,108 @@ describe('Renderer (KonvaRenderer)', () => {
     expect(validTableRect.stroke()).toBe('#6366f1');
     expect(validTableRect.shadowEnabled()).toBe(false);
   });
+
+  it('does not add a pending background image after the background is hidden', () => {
+    renderer = createRenderer({ container });
+    const bg = { src: 'data:image/png;base64,abc', locked: true };
+    renderer.load({ ...testFloorplan, background: bg });
+    const r = renderer as any;
+    const pendingImg: HTMLImageElement = r.backgroundImage;
+    expect(pendingImg).toBeTruthy();
+
+    renderer.load({
+      ...testFloorplan,
+      background: { ...bg, visible: false },
+    });
+    // The original image finishes loading after the hide
+    pendingImg.dispatchEvent(new Event('load'));
+    expect(r.backgroundLayer.getChildren().length).toBe(0);
+  });
+
+  it('reports background drags without mutating the floorplan', () => {
+    const onBackgroundChange = vi.fn();
+    renderer = createRenderer({ container, onBackgroundChange });
+    const plan: Floorplan = {
+      ...testFloorplan,
+      background: { src: 'data:image/png;base64,abc', locked: false },
+    };
+    renderer.load(plan);
+    const r = renderer as any;
+    r.backgroundImage.dispatchEvent(new Event('load'));
+    const konvaImage = r.backgroundLayer.getChildren()[0];
+    konvaImage.position({ x: 25.4, y: 10.6 });
+    konvaImage.fire('dragend');
+
+    expect(onBackgroundChange).toHaveBeenCalledWith(
+      expect.objectContaining({ position: { x: 25, y: 11 } })
+    );
+    expect(plan.background?.position).toBeUndefined();
+  });
+
+  describe('default view fits all content', () => {
+    // A building much larger than the 800x600 jsdom stage, offset from origin
+    const bigPlan: Floorplan = {
+      schemaVersion: 1,
+      dimensions: { width: 800, height: 600 },
+      buildings: [
+        {
+          ...testFloorplan.buildings[0],
+          id: 'b-big',
+          position: { x: 500, y: 300 },
+          points: [
+            { x: 0, y: 0 },
+            { x: 2400, y: 0 },
+            { x: 2400, y: 1200 },
+            { x: 0, y: 1200 },
+          ],
+          zones: [],
+          rows: [],
+        },
+      ],
+    };
+
+    const visibleWorldRect = (r: Renderer) => {
+      const scale = r.getScale();
+      const pos = r.getPosition();
+      return {
+        x1: -pos.x / scale,
+        y1: -pos.y / scale,
+        x2: (800 - pos.x) / scale,
+        y2: (600 - pos.y) / scale,
+      };
+    };
+
+    it('zooms out so a large floorplan is fully visible on load', () => {
+      renderer = createRenderer({ container, floorplan: bigPlan });
+      expect(renderer.getScale()).toBeLessThan(1);
+      const view = visibleWorldRect(renderer);
+      expect(view.x1).toBeLessThanOrEqual(500);
+      expect(view.y1).toBeLessThanOrEqual(300);
+      expect(view.x2).toBeGreaterThanOrEqual(2900);
+      expect(view.y2).toBeGreaterThanOrEqual(1500);
+    });
+
+    it('does not zoom in past 1x for small plans', () => {
+      renderer = createRenderer({ container, floorplan: testFloorplan });
+      expect(renderer.getScale()).toBe(1);
+    });
+
+    it('keeps the user zoom across reloads, and resetZoom re-fits', () => {
+      renderer = createRenderer({ container, floorplan: bigPlan });
+      const fitted = renderer.getScale();
+      renderer.zoomIn(2);
+      renderer.load(bigPlan);
+      expect(renderer.getScale()).toBeCloseTo(fitted * 2);
+
+      renderer.resetZoom();
+      expect(renderer.getScale()).toBeCloseTo(fitted);
+    });
+
+    it('re-fits on reload while the view is untouched', () => {
+      renderer = createRenderer({ container, floorplan: testFloorplan });
+      expect(renderer.getScale()).toBe(1);
+      renderer.load(bigPlan);
+      expect(renderer.getScale()).toBeLessThan(1);
+    });
+  });
 });

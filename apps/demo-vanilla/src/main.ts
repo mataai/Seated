@@ -37,6 +37,19 @@ const btnToggleGrid = document.getElementById(
 const btnTogglePreview = document.getElementById(
   'btnTogglePreview'
 ) as HTMLButtonElement;
+const btnUploadBlueprint = document.getElementById(
+  'btnUploadBlueprint'
+) as HTMLButtonElement;
+const fileBgInput = document.getElementById('fileBgInput') as HTMLInputElement;
+const blueprintActions = document.getElementById(
+  'blueprintActions'
+) as HTMLElement;
+const btnToggleBlueprint = document.getElementById(
+  'btnToggleBlueprint'
+) as HTMLButtonElement;
+const btnRemoveBlueprint = document.getElementById(
+  'btnRemoveBlueprint'
+) as HTMLButtonElement;
 const btnZoomIn = document.getElementById('btnZoomIn') as HTMLButtonElement;
 const btnZoomOut = document.getElementById('btnZoomOut') as HTMLButtonElement;
 const btnResetZoom = document.getElementById(
@@ -269,6 +282,56 @@ btnToggleGrid.addEventListener('click', () => {
 
 btnTogglePreview.addEventListener('click', () => {
   editorInstance?.togglePreview();
+});
+
+// Blueprint Floorplan Upload (Image or PDF)
+btnUploadBlueprint.addEventListener('click', () => {
+  fileBgInput.click();
+});
+
+fileBgInput.addEventListener('change', async (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file || !editorInstance) return;
+
+  btnUploadBlueprint.disabled = true;
+  btnUploadBlueprint.textContent = 'Uploading...';
+  try {
+    const result = await editorInstance.loadBackgroundFromFile(file);
+    logEvent(
+      'blueprint',
+      `Loaded ${file.name} (${result.width}x${result.height})`
+    );
+    blueprintActions.style.display = 'flex';
+    btnUploadBlueprint.textContent = 'Replace Blueprint';
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logEvent('error', `Failed to load blueprint: ${msg}`);
+    btnUploadBlueprint.textContent = 'Upload Blueprint';
+  } finally {
+    btnUploadBlueprint.disabled = false;
+    fileBgInput.value = '';
+  }
+});
+
+btnToggleBlueprint.addEventListener('click', () => {
+  if (!editorInstance) return;
+  const current = editorInstance.getBackground();
+  if (current) {
+    const nextVis = current.visible === false;
+    editorInstance.updateBackground({ visible: nextVis });
+    btnToggleBlueprint.textContent = nextVis
+      ? 'Hide Blueprint'
+      : 'Show Blueprint';
+    logEvent('blueprint', nextVis ? 'Blueprint visible' : 'Blueprint hidden');
+  }
+});
+
+btnRemoveBlueprint.addEventListener('click', () => {
+  if (!editorInstance) return;
+  editorInstance.setBackground(undefined);
+  blueprintActions.style.display = 'none';
+  btnUploadBlueprint.textContent = 'Upload Blueprint';
+  logEvent('blueprint', 'Blueprint removed');
 });
 
 // Zoom & Pan
