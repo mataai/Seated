@@ -209,6 +209,8 @@ describe('Viewer (@open-seats/viewer)', () => {
     await vi.advanceTimersByTimeAsync(10);
 
     const tooltipEl = tooltipManager.tooltipEl as HTMLElement;
+    // The tooltip must be in the page, not just referenced by the manager.
+    expect(container.contains(tooltipEl)).toBe(true);
     expect(tooltipEl.querySelector('script')).toBeNull();
     const img = tooltipEl.querySelector('img');
     if (img) {

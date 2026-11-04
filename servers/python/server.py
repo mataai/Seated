@@ -60,8 +60,14 @@ async def http_app(scope, receive, send):
             if not message.get("more_body"):
                 break
         try:
-            changes = json.loads(raw)["changes"]
-            rev = await hub.publish(unquote(match.group(1)), changes)
+            payload = json.loads(raw)
+            if not isinstance(payload, dict):
+                raise TypeError("payload must be an object")
+            if "changes" not in payload and "data" not in payload:
+                raise KeyError("changes")
+            rev = await hub.publish(
+                unquote(match.group(1)), payload.get("changes"), payload.get("data")
+            )
             status, body = 200, json.dumps({"rev": rev}).encode()
         except (ValueError, KeyError, TypeError):
             status = 400
@@ -79,7 +85,7 @@ app = socketio.ASGIApp(sio, other_asgi_app=http_app)
 
 
 async def simulate_bookings(floorplan_id: str, floorplan: dict) -> None:
-    """Every 2s, reserves a random available seat or releases a reserved one."""
+    """Every 2s, books or releases a random seat and reprices another one."""
     seat_ids = [
         seat["id"]
         for building in floorplan["buildings"]
@@ -89,10 +95,11 @@ async def simulate_bookings(floorplan_id: str, floorplan: dict) -> None:
     while True:
         await asyncio.sleep(2)
         seat_id = random.choice(seat_ids)
-        _, statuses = await hub.store.get(floorplan_id)
+        _, statuses, _ = await hub.store.get(floorplan_id)
         await hub.publish(
             floorplan_id,
             {seat_id: None if statuses.get(seat_id) == "reserved" else "reserved"},
+            {random.choice(seat_ids): {"price": 40 + 5 * random.randrange(20)}},
         )
 
 

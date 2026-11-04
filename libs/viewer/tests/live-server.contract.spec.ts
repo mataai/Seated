@@ -72,18 +72,20 @@ async function waitFor<T>(
 function modelSink() {
   const model = {
     statuses: {} as Record<string, string>,
+    data: {} as Record<string, unknown>,
     rev: undefined as number | undefined,
     states: [] as StatusConnectionState[],
     errors: [] as string[],
     snapshots: 0,
   };
   const sink: StatusSink = {
-    snapshot(statuses, rev) {
+    snapshot(statuses, rev, data) {
       model.statuses = { ...statuses };
+      model.data = { ...data };
       model.rev = rev;
       model.snapshots++;
     },
-    patch(changes, rev) {
+    patch(changes, rev, data) {
       if (rev !== undefined && model.rev !== undefined && rev <= model.rev) {
         return;
       }
@@ -91,6 +93,10 @@ function modelSink() {
       for (const [id, status] of Object.entries(changes)) {
         if (status === null) delete model.statuses[id];
         else model.statuses[id] = status;
+      }
+      for (const [id, value] of Object.entries(data ?? {})) {
+        if (value === null) delete model.data[id];
+        else model.data[id] = value;
       }
     },
     connectionState(state, error) {
@@ -120,12 +126,13 @@ for (const server of SERVERS) {
 
     const publish = async (
       floorplanId: string,
-      changes: Record<string, string | null>
+      changes?: Record<string, string | null>,
+      data?: Record<string, Record<string, unknown> | null>
     ) => {
       const res = await fetch(`${baseUrl}/floorplans/${floorplanId}/seats`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ changes }),
+        body: JSON.stringify({ changes, data }),
       });
       expect(res.status).toBe(200);
       return ((await res.json()) as { rev: number }).rev;
@@ -200,6 +207,55 @@ for (const server of SERVERS) {
       await waitFor(() => model.states.at(-1) === 'live' && model.rev === rev);
       expect(model.snapshots).toBe(2);
       expect(model.statuses).toEqual({ 's-5': 'reserved' });
+    });
+
+    it('delivers seat data in the snapshot and in patches', async () => {
+      const id = `plan-${server.name}-data`;
+      await publish(id, { 's-1': 'reserved' }, { 's-1': { price: 95 } });
+
+      const { sink, model } = modelSink();
+      socketIoStatusSource(connect({ floorplanId: id })).subscribe(sink);
+      await waitFor(() => model.states.at(-1) === 'live');
+      expect(model.data).toEqual({ 's-1': { price: 95 } });
+
+      // Data-only patch: statuses stay as they are.
+      let rev = await publish(id, undefined, { 's-2': { price: 40 } });
+      await waitFor(() => model.rev === rev);
+      expect(model.data).toEqual({
+        's-1': { price: 95 },
+        's-2': { price: 40 },
+      });
+      expect(model.statuses).toEqual({ 's-1': 'reserved' });
+
+      rev = await publish(id, { 's-1': null }, { 's-1': null });
+      await waitFor(() => model.rev === rev);
+      expect(model.data).toEqual({ 's-2': { price: 40 } });
+      expect(model.statuses).toEqual({});
+    });
+
+    it('rejects malformed changes without storing any of them', async () => {
+      const id = `plan-${server.name}-invalid`;
+      const url = `${baseUrl}/floorplans/${id}/seats`;
+      for (const body of [
+        { data: { 's-1': 5 } },
+        { data: { 's-1': 'x' } },
+        { changes: { 's-1': 'reserved' }, data: [1] },
+        { changes: { 's-1': 7 } },
+        'changes',
+      ]) {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        expect(res.status).toBe(400);
+      }
+
+      const { sink, model } = modelSink();
+      socketIoStatusSource(connect({ floorplanId: id })).subscribe(sink);
+      await waitFor(() => model.states.at(-1) === 'live');
+      expect(model.statuses).toEqual({});
+      expect(model.data ?? {}).toEqual({});
     });
 
     it('answers the CORS preflight browsers send before publishing', async () => {

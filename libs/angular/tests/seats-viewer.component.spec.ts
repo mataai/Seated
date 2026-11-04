@@ -183,6 +183,28 @@ describe('SeatsViewerComponent', () => {
     ]);
     expect(run).toHaveBeenCalledTimes(1);
   });
+
+  it('passes the seatData input to the viewer, replacing it on change', () => {
+    const changes: unknown[] = [];
+    component.seatDataChanged.subscribe((payload) => changes.push(payload));
+
+    fixture.componentRef.setInput('floorplan', SAMPLE_FLOORPLAN);
+    fixture.componentRef.setInput('seatData', { 's-a-1a': { ticket: 'T-1' } });
+    fixture.detectChanges();
+    expect(component.getSeatData('s-a-1a')).toEqual({ ticket: 'T-1' });
+
+    fixture.componentRef.setInput('seatData', { 's-a-2a': { ticket: 'T-2' } });
+    fixture.detectChanges();
+    expect(component.getSeatData('s-a-1a')).toBeUndefined();
+    expect(component.getSeatData('s-a-2a')).toEqual({ ticket: 'T-2' });
+    expect(changes).toEqual([
+      {
+        changes: { 's-a-2a': { ticket: 'T-2' } },
+        replaced: true,
+        source: 'app',
+      },
+    ]);
+  });
 });
 
 function manualSource() {

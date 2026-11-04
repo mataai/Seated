@@ -17,6 +17,7 @@ SYNC_EVENT = "seats:sync"
 PATCH_EVENT = "seats:patch"
 
 Changes = dict[str, Optional[str]]
+DataChanges = dict[str, Optional[dict[str, Any]]]
 Authorize = Callable[[dict, dict, str], Union[bool, Awaitable[bool]]]
 
 
@@ -24,34 +25,70 @@ def room_for(floorplan_id: str) -> str:
     return f"floorplan:{floorplan_id}"
 
 
+def validate_changes(changes: Any, data: Any) -> None:
+    """Raises ValueError unless `changes`/`data` match the protocol.
+
+    Clients reject a whole patch or snapshot containing a malformed entry, so
+    nothing invalid may reach the store.
+    """
+    if changes is not None:
+        if not isinstance(changes, dict) or not all(
+            isinstance(k, str) and (v is None or isinstance(v, str))
+            for k, v in changes.items()
+        ):
+            raise ValueError("changes must map seat ids to a status or null")
+    if data is not None:
+        if not isinstance(data, dict) or not all(
+            isinstance(k, str) and (v is None or isinstance(v, dict))
+            for k, v in data.items()
+        ):
+            raise ValueError("data must map seat ids to an object or null")
+
+
 class MemoryStore:
     """In-memory store, one entry per floorplan.
 
     Replace with your database; keep `get` and `apply` atomic so a snapshot's
-    `rev` matches its `statuses`.
+    `rev` matches its contents.
+
+    Seat data is broadcast to every client viewing the floorplan: only store
+    data that all of them may see (prices, categories), never per-user data.
     """
 
     def __init__(self, initial: Optional[dict[str, dict[str, str]]] = None):
         self._floorplans: dict[str, dict[str, Any]] = {
-            fid: {"rev": 0, "statuses": dict(statuses)}
+            fid: {"rev": 0, "statuses": dict(statuses), "data": {}}
             for fid, statuses in (initial or {}).items()
         }
 
     def _entry(self, floorplan_id: str) -> dict[str, Any]:
-        return self._floorplans.setdefault(floorplan_id, {"rev": 0, "statuses": {}})
+        return self._floorplans.setdefault(
+            floorplan_id, {"rev": 0, "statuses": {}, "data": {}}
+        )
 
-    async def get(self, floorplan_id: str) -> tuple[int, dict[str, str]]:
+    async def get(
+        self, floorplan_id: str
+    ) -> tuple[int, dict[str, str], dict[str, dict[str, Any]]]:
         entry = self._entry(floorplan_id)
-        return entry["rev"], dict(entry["statuses"])
+        return entry["rev"], dict(entry["statuses"]), dict(entry["data"])
 
-    async def apply(self, floorplan_id: str, changes: Changes) -> int:
-        """Applies changes (`None` resets a seat) and returns the new revision."""
+    async def apply(
+        self,
+        floorplan_id: str,
+        changes: Changes,
+        data: Optional[DataChanges] = None,
+    ) -> int:
+        """Applies changes (`None` resets a seat / removes its data).
+
+        Returns the new revision.
+        """
         entry = self._entry(floorplan_id)
-        for seat_id, status in changes.items():
-            if status is None:
-                entry["statuses"].pop(seat_id, None)
-            else:
-                entry["statuses"][seat_id] = status
+        for target, updates in ((entry["statuses"], changes), (entry["data"], data or {})):
+            for seat_id, value in updates.items():
+                if value is None:
+                    target.pop(seat_id, None)
+                else:
+                    target[seat_id] = value
         entry["rev"] += 1
         return entry["rev"]
 
@@ -96,17 +133,26 @@ class SeatsHub:
             return {"v": PROTOCOL_VERSION, "error": f"Unsupported protocol version: {version}"}
         session = await self.sio.get_session(sid)
         try:
-            rev, statuses = await self.store.get(session["floorplan_id"])
+            rev, statuses, data = await self.store.get(session["floorplan_id"])
         except Exception:
             return {"v": PROTOCOL_VERSION, "error": "Could not load seat statuses"}
-        return {"v": PROTOCOL_VERSION, "rev": rev, "statuses": statuses}
+        return {"v": PROTOCOL_VERSION, "rev": rev, "statuses": statuses, "data": data}
 
-    async def publish(self, floorplan_id: str, changes: Changes) -> int:
-        """Call after a booking, cancellation, hold, etc. has been committed."""
-        rev = await self.store.apply(floorplan_id, changes)
-        await self.sio.emit(
-            PATCH_EVENT,
-            {"v": PROTOCOL_VERSION, "rev": rev, "changes": changes},
-            room=room_for(floorplan_id),
-        )
+    async def publish(
+        self,
+        floorplan_id: str,
+        changes: Optional[Changes] = None,
+        data: Optional[DataChanges] = None,
+    ) -> int:
+        """Call after a booking, cancellation, hold, price change, etc.
+
+        Raises ValueError, before anything is stored, if the changes are malformed.
+        """
+        validate_changes(changes, data)
+        changes = changes or {}
+        rev = await self.store.apply(floorplan_id, changes, data)
+        message: dict[str, Any] = {"v": PROTOCOL_VERSION, "rev": rev, "changes": changes}
+        if data is not None:
+            message["data"] = data
+        await self.sio.emit(PATCH_EVENT, message, room=room_for(floorplan_id))
         return rev

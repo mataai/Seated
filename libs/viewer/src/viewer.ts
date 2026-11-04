@@ -13,14 +13,23 @@ import {
   type Renderer,
   type RenderSeatContext,
 } from '@open-seats/renderer';
-import { TooltipManager } from './tooltip';
+import { TooltipManager, type SeatTooltipRenderFn } from './tooltip';
 import type {
+  SeatData,
+  SeatDataChanges,
   StatusChanges,
   StatusConnectionState,
+  StatusPatchOptions,
+  StatusSnapshotOptions,
   StatusSource,
-  StatusUpdateOptions,
 } from './live/status-source';
-import type { ViewerEvents, ViewerInstance, ViewerOptions } from './types';
+import type {
+  TooltipContext,
+  TooltipRenderer,
+  ViewerEvents,
+  ViewerInstance,
+  ViewerOptions,
+} from './types';
 
 export class Viewer implements ViewerInstance {
   private container: HTMLElement;
@@ -39,6 +48,12 @@ export class Viewer implements ViewerInstance {
   private statusRevision?: number;
   private stopStatusSource?: () => void;
   private connectionState: StatusConnectionState | null = null;
+  /**
+   * Runtime seat data, never part of the floorplan. Two layers so a live
+   * snapshot can't wipe what the app set: `getSeatData` merges them.
+   */
+  private appSeatData = new Map<string, SeatData>();
+  private liveSeatData = new Map<string, SeatData>();
   private connectionError: unknown = undefined;
   /** Source from `options.statusSource`, connected once the constructor returns. */
   private pendingStatusSource?: StatusSource;
@@ -62,12 +77,6 @@ export class Viewer implements ViewerInstance {
     this.statusRegistry = new StatusRegistry(
       options.statusDefinitions,
       options.defaultStatus
-    );
-
-    this.tooltipManager = new TooltipManager(
-      this.container,
-      options.tooltipProvider,
-      options.tooltipDebounceMs
     );
 
     this.renderer = createRenderer({
@@ -94,6 +103,26 @@ export class Viewer implements ViewerInstance {
         this.handleSeatClick(ctx);
       },
     });
+
+    // Created after the renderer: Konva empties the container when it builds
+    // the stage, which would remove an element added earlier.
+    // Status and data are read at call time, so a refresh sees fresh values.
+    const withState = (ctx: RenderSeatContext): TooltipContext => ({
+      ...ctx,
+      status: this.getStatus(ctx.seat.id),
+      data: this.getSeatData(ctx.seat.id),
+    });
+    const { tooltipProvider, tooltipRenderer } = options;
+    this.tooltipManager = new TooltipManager(
+      this.container,
+      tooltipProvider && ((ctx) => tooltipProvider(withState(ctx))),
+      options.tooltipDebounceMs,
+      tooltipRenderer && this.wrapTooltipRenderer(tooltipRenderer)
+    );
+
+    for (const [seatId, data] of Object.entries(options.seatData ?? {})) {
+      this.appSeatData.set(seatId, data);
+    }
 
     // ARIA Live region for screen readers
     this.liveRegion = document.createElement('div');
@@ -389,6 +418,10 @@ export class Viewer implements ViewerInstance {
       tolerance: this.options.tolerance,
     });
 
+    // Cached tooltips may describe seats of the previous floorplan.
+    this.tooltipManager.hide();
+    this.tooltipManager.invalidate();
+
     this.renderer.load(floorplan);
     this.emitter.emit('violationsUpdated', this._violations);
     this.emitter.emit('floorplanLoaded', floorplan);
@@ -412,16 +445,19 @@ export class Viewer implements ViewerInstance {
 
   public applyStatusSnapshot(
     statuses: Record<string, string>,
-    options: StatusUpdateOptions = {}
+    options: StatusSnapshotOptions = {}
   ): void {
     // A snapshot is authoritative: it also resets revision ordering.
     this.statusRevision = options.revision;
+    // Data first, so status listeners already see the matching data. Tooltips
+    // are refreshed once, by updateStatuses, when both are applied.
+    this.writeSeatData(this.liveSeatData, options.data ?? {}, true, 'live');
     this.updateStatuses(statuses, true);
   }
 
   public applyStatusPatch(
     changes: StatusChanges,
-    options: StatusUpdateOptions = {}
+    options: StatusPatchOptions = {}
   ): boolean {
     const { revision } = options;
     if (revision !== undefined) {
@@ -433,7 +469,16 @@ export class Viewer implements ViewerInstance {
       }
       this.statusRevision = revision;
     }
-    this.updateStatuses(changes, false);
+    const dataIds = options.data ? Object.keys(options.data) : [];
+    if (options.data && dataIds.length > 0) {
+      this.writeSeatData(this.liveSeatData, options.data, false, 'live');
+    }
+    if (Object.keys(changes).length > 0) {
+      // Refreshes tooltips for both, after the statuses are applied.
+      this.updateStatuses(changes, false, dataIds);
+    } else if (dataIds.length > 0) {
+      this.tooltipManager.invalidate(dataIds);
+    }
     return true;
   }
 
@@ -444,11 +489,11 @@ export class Viewer implements ViewerInstance {
       // Calls from a replaced source are dropped.
       let active = true;
       const stop = source.subscribe({
-        snapshot: (statuses, revision) => {
-          if (active) this.applyStatusSnapshot(statuses, { revision });
+        snapshot: (statuses, revision, data) => {
+          if (active) this.applyStatusSnapshot(statuses, { revision, data });
         },
-        patch: (changes, revision) => {
-          if (active) this.applyStatusPatch(changes, { revision });
+        patch: (changes, revision, data) => {
+          if (active) this.applyStatusPatch(changes, { revision, data });
         },
         connectionState: (state, error) => {
           if (!active) return;
@@ -483,12 +528,108 @@ export class Viewer implements ViewerInstance {
     this.connectionError = undefined;
   }
 
+  public setSeatData(
+    data: SeatDataChanges,
+    options: { replace?: boolean } = {}
+  ): void {
+    this.updateSeatData(
+      this.appSeatData,
+      data,
+      options.replace ?? false,
+      'app'
+    );
+  }
+
+  public getSeatData(seatId: string): SeatData | undefined {
+    const live = this.liveSeatData.get(seatId);
+    const app = this.appSeatData.get(seatId);
+    if (!live || !app) return app ?? live;
+    return { ...live, ...app };
+  }
+
+  private updateSeatData(
+    layer: Map<string, SeatData>,
+    changes: SeatDataChanges,
+    replace: boolean,
+    source: 'app' | 'live'
+  ): void {
+    if (this.writeSeatData(layer, changes, replace, source)) {
+      this.tooltipManager.invalidate(
+        replace ? undefined : Object.keys(changes)
+      );
+    }
+  }
+
+  /**
+   * Stores seat data and emits `seatDataChanged`, without refreshing tooltips.
+   * Returns false (and emits nothing) when an empty layer is replaced by
+   * nothing.
+   */
+  private writeSeatData(
+    layer: Map<string, SeatData>,
+    changes: SeatDataChanges,
+    replace: boolean,
+    source: 'app' | 'live'
+  ): boolean {
+    const ids = Object.keys(changes);
+    if (replace && layer.size === 0 && ids.length === 0) return false;
+    if (replace) layer.clear();
+    for (const seatId of ids) {
+      const value = changes[seatId];
+      if (value === null || value === undefined) layer.delete(seatId);
+      else layer.set(seatId, value);
+    }
+    this.emitter.emit('seatDataChanged', {
+      changes,
+      replaced: replace,
+      source,
+    });
+    return true;
+  }
+
+  public refreshTooltips(seatIds?: string[]): void {
+    this.tooltipManager.invalidate(seatIds);
+  }
+
+  public setTooltipRenderer(renderer: TooltipRenderer | null): void {
+    this.tooltipManager.setRenderer(
+      renderer ? this.wrapTooltipRenderer(renderer) : undefined
+    );
+  }
+
+  /** Adapts an app renderer to the manager: adds status and data, read at call time. */
+  private wrapTooltipRenderer(renderer: TooltipRenderer): SeatTooltipRenderFn {
+    const withState = (ctx: RenderSeatContext): TooltipContext => ({
+      ...ctx,
+      status: this.getStatus(ctx.seat.id),
+      data: this.getSeatData(ctx.seat.id),
+    });
+    return (ctx, host) => {
+      const result = renderer(withState(ctx), host);
+      if (!result || typeof result === 'function') return result;
+      const { update, destroy } = result;
+      return {
+        update: update && ((next) => update(withState(next))),
+        destroy,
+      };
+    };
+  }
+
   public getConnectionState(): StatusConnectionState | null {
     return this.connectionState;
   }
 
-  private updateStatuses(changes: StatusChanges, replace: boolean): void {
+  /** `alsoRefresh`: more seats whose tooltips are stale (e.g. their data). */
+  private updateStatuses(
+    changes: StatusChanges,
+    replace: boolean,
+    alsoRefresh: string[] = []
+  ): void {
     this.renderer.setStatuses(changes, { replace });
+    // Tooltips often show the status; drop the ones that may be stale.
+    this.tooltipManager.invalidate(
+      replace ? undefined : [...Object.keys(changes), ...alsoRefresh]
+    );
     this.emitter.emit('statusesChanged', { changes, replaced: replace });
     this.releaseUnavailableSelection();
   }
@@ -610,6 +751,8 @@ export class Viewer implements ViewerInstance {
     this.renderer.destroy();
     this.emitter.removeAllListeners();
     this.seatContextMap.clear();
+    this.appSeatData.clear();
+    this.liveSeatData.clear();
     this.cachedSeatWorldPositions = undefined;
   }
 }

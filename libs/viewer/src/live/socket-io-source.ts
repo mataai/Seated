@@ -1,4 +1,6 @@
 import type {
+  SeatData,
+  SeatDataChanges,
   StatusChanges,
   StatusConnectionState,
   StatusSink,
@@ -21,13 +23,28 @@ export interface SeatsSyncRequest {
 }
 
 export type SeatsSyncReply =
-  | { v: number; rev?: number; statuses: Record<string, string> }
+  | {
+      v: number;
+      rev?: number;
+      statuses: Record<string, string>;
+      /** Live data of every seat that has some. Optional. */
+      data?: Record<string, SeatData>;
+    }
   | { v: number; error: string };
 
+/** At least one of `changes` and `data` is present. */
 export interface SeatsPatchMessage {
   v: number;
   rev?: number;
+  changes?: StatusChanges;
+  /** New data for changed seats (replaces it); `null` removes it. */
+  data?: SeatDataChanges;
+}
+
+interface ParsedPatch {
   changes: StatusChanges;
+  rev?: number;
+  data?: SeatDataChanges;
 }
 
 /**
@@ -83,7 +100,7 @@ export function socketIoStatusSource(
       let disposed = false;
       let syncGeneration = 0;
       /** Patches received while a sync is in flight; null when not syncing. */
-      let heldPatches: { changes: StatusChanges; rev?: number }[] | null = null;
+      let heldPatches: ParsedPatch[] | null = null;
       /** True once a snapshot was applied on the current connection. */
       let synced = false;
       let syncTimer: ReturnType<typeof setTimeout> | undefined;
@@ -132,8 +149,10 @@ export function socketIoStatusSource(
             return;
           }
           synced = true;
-          sink.snapshot(snapshot.statuses, snapshot.rev);
-          for (const patch of held) sink.patch(patch.changes, patch.rev);
+          sink.snapshot(snapshot.statuses, snapshot.rev, snapshot.data);
+          for (const patch of held) {
+            sink.patch(patch.changes, patch.rev, patch.data);
+          }
           sink.connectionState('live');
         });
       };
@@ -147,7 +166,7 @@ export function socketIoStatusSource(
         if (heldPatches) {
           heldPatches.push(patch);
         } else if (synced) {
-          sink.patch(patch.changes, patch.rev);
+          sink.patch(patch.changes, patch.rev, patch.data);
         }
         // Otherwise there is no snapshot to apply it to; the next sync
         // includes it.
@@ -193,9 +212,21 @@ function isRevision(value: unknown): value is number | undefined {
   return value === undefined || (typeof value === 'number' && isFinite(value));
 }
 
-function parseSyncReply(
-  reply: unknown
-): { statuses: Record<string, string>; rev?: number } | { error: string } {
+/** Seat id -> data object (or `null` when `allowNull`). */
+function isSeatDataMap(value: unknown, allowNull: boolean): boolean {
+  return (
+    isRecord(value) &&
+    Object.values(value).every((d) => (allowNull && d === null) || isRecord(d))
+  );
+}
+
+function parseSyncReply(reply: unknown):
+  | {
+      statuses: Record<string, string>;
+      rev?: number;
+      data?: Record<string, SeatData>;
+    }
+  | { error: string } {
   if (!isRecord(reply)) return { error: 'Invalid seats:sync reply' };
   if (reply['v'] !== LIVE_PROTOCOL_VERSION) {
     return {
@@ -205,30 +236,44 @@ function parseSyncReply(
   if (typeof reply['error'] === 'string') return { error: reply['error'] };
   const statuses = reply['statuses'];
   const rev = reply['rev'];
+  const data = reply['data'];
   if (
     !isRecord(statuses) ||
     !isRevision(rev) ||
-    !Object.values(statuses).every((s) => typeof s === 'string')
+    !Object.values(statuses).every((s) => typeof s === 'string') ||
+    (data !== undefined && !isSeatDataMap(data, false))
   ) {
     return { error: 'Invalid seats:sync reply' };
   }
-  return { statuses: statuses as Record<string, string>, rev };
+  return {
+    statuses: statuses as Record<string, string>,
+    rev,
+    data: data as Record<string, SeatData> | undefined,
+  };
 }
 
-function parsePatch(
-  message: unknown
-): { changes: StatusChanges; rev?: number } | null {
+function parsePatch(message: unknown): ParsedPatch | null {
   if (!isRecord(message) || message['v'] !== LIVE_PROTOCOL_VERSION) {
     return null;
   }
   const changes = message['changes'];
   const rev = message['rev'];
+  const data = message['data'];
+  if (changes === undefined && data === undefined) return null;
   if (
-    !isRecord(changes) ||
-    !isRevision(rev) ||
-    !Object.values(changes).every((s) => s === null || typeof s === 'string')
+    (changes !== undefined &&
+      (!isRecord(changes) ||
+        !Object.values(changes).every(
+          (s) => s === null || typeof s === 'string'
+        ))) ||
+    (data !== undefined && !isSeatDataMap(data, true)) ||
+    !isRevision(rev)
   ) {
     return null;
   }
-  return { changes: changes as StatusChanges, rev };
+  return {
+    changes: (changes ?? {}) as StatusChanges,
+    rev,
+    data: data as SeatDataChanges | undefined,
+  };
 }

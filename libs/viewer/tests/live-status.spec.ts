@@ -308,4 +308,77 @@ describe('Viewer live statuses', () => {
     expect(live.stop).toHaveBeenCalledTimes(1);
     expect(live.subscribed).toBe(false);
   });
+
+  describe('tooltips', () => {
+    const seatCtx = (index: number) => ({
+      seat: plan.buildings[0].rows[0].seats[index],
+      row: plan.buildings[0].rows[0],
+      building: plan.buildings[0],
+    });
+    const hover = (index: number) =>
+      (viewer as any).tooltipManager.show(
+        seatCtx(index),
+        new MouseEvent('mousemove', { clientX: 10, clientY: 10 })
+      );
+    const tooltipText = () =>
+      container.querySelector('.open-seats-tooltip')?.textContent;
+
+    const createWithStatusTooltip = () => {
+      const provider = vi.fn(async ({ seat }) => ({
+        title: seat.label,
+        content: viewer!.getStatus(seat.id),
+      }));
+      viewer = createViewer(container, {
+        floorplan: plan,
+        tooltipProvider: provider,
+        tooltipDebounceMs: 10,
+      });
+      return provider;
+    };
+
+    it('refreshes an open tooltip when its seat changes status', async () => {
+      const provider = createWithStatusTooltip();
+      hover(0);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(tooltipText()).toBe('Hall-A-1available');
+
+      viewer!.applyStatusPatch({ 's-1': 'reserved' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(tooltipText()).toBe('Hall-A-1reserved');
+      expect(provider).toHaveBeenCalledTimes(2);
+    });
+
+    it('only drops cached tooltips of seats that changed', async () => {
+      const provider = createWithStatusTooltip();
+      hover(0);
+      await vi.advanceTimersByTimeAsync(20);
+      hover(1);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(provider).toHaveBeenCalledTimes(2);
+
+      viewer!.applyStatusPatch({ 's-1': 'reserved' });
+      hover(1); // unchanged -> cached
+      expect(provider).toHaveBeenCalledTimes(2);
+      hover(0); // changed -> fetched again
+      await vi.advanceTimersByTimeAsync(20);
+      expect(provider).toHaveBeenCalledTimes(3);
+      expect(tooltipText()).toBe('Hall-A-1reserved');
+
+      viewer!.applyStatusSnapshot({});
+      viewer!.refreshTooltips();
+      hover(1);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(provider.mock.calls.length).toBeGreaterThan(3);
+    });
+
+    it('clears cached tooltips when a floorplan is loaded', async () => {
+      const provider = createWithStatusTooltip();
+      hover(0);
+      await vi.advanceTimersByTimeAsync(20);
+      viewer!.load(plan);
+      hover(0);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(provider).toHaveBeenCalledTimes(2);
+    });
+  });
 });

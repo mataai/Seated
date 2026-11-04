@@ -11,6 +11,7 @@ import { CommonModule } from '@angular/common';
 import {
   SeatsEditorComponent,
   SeatsViewerComponent,
+  SeatTooltipDirective,
 } from '@open-seats/angular';
 import {
   cloneFloorplan,
@@ -22,11 +23,14 @@ import type { ToolType } from '@open-seats/editor';
 import {
   socketIoStatusSource,
   type RenderSeatContext,
+  type SeatData,
   type StatusConnectionState,
   type StatusSource,
   type ViewerEvents,
+  type ViewerOptions,
 } from '@open-seats/viewer';
 import { io, type Socket } from 'socket.io-client';
+import { SeatTooltipCardComponent } from './seat-tooltip-card.component';
 
 /** Live seat server (`npm run start:live-server`). Null disables live mode. */
 export const LIVE_SERVER_URL = new InjectionToken<string | null>(
@@ -38,7 +42,13 @@ const LIVE_FLOORPLAN_ID = 'demo';
 @Component({
   standalone: true,
   selector: 'open-seats-root',
-  imports: [CommonModule, SeatsViewerComponent, SeatsEditorComponent],
+  imports: [
+    CommonModule,
+    SeatsViewerComponent,
+    SeatsEditorComponent,
+    SeatTooltipDirective,
+    SeatTooltipCardComponent,
+  ],
   templateUrl: './app.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrls: ['./app.component.scss'],
@@ -51,6 +61,23 @@ export class AppComponent implements OnDestroy {
   /** Passed to the viewer; null while live mode is off. */
   public statusSource: StatusSource | null = null;
   public liveState: StatusConnectionState | null = null;
+
+  /**
+   * The tooltip itself is the `<ng-template seatTooltip>` in the template,
+   * rendering `SeatTooltipCardComponent`. The viewer re-renders it when the
+   * hovered seat's status or data changes (e.g. a live booking or price).
+   */
+  public readonly viewerOptions: Partial<ViewerOptions> = {
+    tooltipDebounceMs: 120,
+  };
+
+  /**
+   * Tickets for seats reserved in this browser, shown in the tooltip. Passed
+   * to the viewer as seat data: it stays here and is never sent to the live
+   * server or saved in the floorplan.
+   */
+  public myTickets: Record<string, SeatData> = {};
+  private ticketCounter = 1000;
 
   /** Mirror of the viewer's statuses, kept in sync via `statusesChanged`. */
   private seatStatuses: Record<string, string> = {};
@@ -73,6 +100,13 @@ export class AppComponent implements OnDestroy {
       else next[seatId] = status;
     }
     this.seatStatuses = next;
+    // A released seat (e.g. by the server) is no longer this user's ticket.
+    const stillMine = Object.entries(this.myTickets).filter(
+      ([seatId]) => next[seatId] === 'reserved'
+    );
+    if (stillMine.length !== Object.keys(this.myTickets).length) {
+      this.myTickets = Object.fromEntries(stillMine);
+    }
     this.recountStatuses();
   }
 
@@ -274,6 +308,7 @@ export class AppComponent implements OnDestroy {
         updateMap[id] = 'reserved';
       }
       this.statuses = updateMap;
+      this.addTickets(this.selectedSeatIds);
       viewerComp.clearSelection();
       this.addLog(
         'reserved',
@@ -299,10 +334,24 @@ export class AppComponent implements OnDestroy {
         }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      this.addTickets(seatIds);
       this.addLog('reserved', `Reserved ${seatIds.length} seat(s) on server`);
     } catch (e) {
       this.addLog('error', `Reservation failed: ${(e as Error).message}`);
     }
+  }
+
+  private addTickets(seatIds: string[]): void {
+    const bookedAt = new Date().toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const tickets = { ...this.myTickets };
+    for (const seatId of seatIds) {
+      tickets[seatId] = { ticket: `T-${++this.ticketCounter}`, bookedAt };
+    }
+    this.myTickets = tickets;
+    this.cdr.markForCheck();
   }
 
   public clearSelection(): void {
