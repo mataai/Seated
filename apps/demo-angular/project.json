@@ -28,7 +28,7 @@
       },
       "configurations": {
         "production": {
-          "baseHref": "/Seated/",
+          "baseHref": "/Seated/app/",
           "budgets": [
             {
               "type": "initial",

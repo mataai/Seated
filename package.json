@@ -7,6 +7,9 @@
     "start:angular": "nx serve ng-demo",
     "start:vanilla": "nx serve demo-vanilla",
     "start:live-server": "node --experimental-strip-types --disable-warning=ExperimentalWarning apps/demo-angular/live-server.mjs",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "nx build docs",
+    "docs:preview": "vitepress preview docs",
     "check": "nx format:check && nx run-many -t lint typecheck test",
     "lint": "nx run-many -t lint",
     "test": "nx run-many -t test",
@@ -64,6 +67,7 @@
     "typescript-eslint": "^8.33.1",
     "vite": "8.3.4",
     "vite-plugin-dts": "~4.5.0",
+    "vitepress": "^1.6.4",
     "vitest": "4.1.9",
     "vitest-canvas-mock": "^1.2.0"
   }

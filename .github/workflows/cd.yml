@@ -1,4 +1,4 @@
-name: CD - Deploy Demo to GitHub Pages
+name: CD - Deploy Docs & Demo to GitHub Pages
 
 on:
   workflow_run:
@@ -40,11 +40,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Angular Demo
+      # Site layout on https://<owner>.github.io/Seated/:
+      #   /       documentation (VitePress, with its own live demo at /demo)
+      #   /app/   Angular demo app (baseHref /Seated/app/)
+      - name: Build documentation
+        run: npx nx build docs
+        env:
+          DOCS_BASE: /Seated/
+
+      - name: Build Angular demo
         run: npx nx build ng-demo --configuration=production
 
-      - name: Add SPA 404.html Fallback
-        run: cp dist/apps/demo-angular/browser/index.html dist/apps/demo-angular/browser/404.html
+      - name: Assemble site
+        run: |
+          mkdir -p site
+          cp -R docs/.vitepress/dist/. site/
+          cp -R dist/apps/demo-angular/browser site/app
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
@@ -52,7 +63,7 @@ jobs:
       - name: Upload GitHub Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist/apps/demo-angular/browser
+          path: site
 
       - name: Deploy to GitHub Pages
         id: deployment

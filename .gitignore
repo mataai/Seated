@@ -55,3 +55,6 @@ vitest.config.*.timestamp*
 .nx/polygraph
 .nx/self-healing
 .nx/migrate-runs
+# VitePress
+docs/.vitepress/cache
+docs/.vitepress/dist
