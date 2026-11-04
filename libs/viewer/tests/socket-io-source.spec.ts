@@ -245,4 +245,79 @@ describe('socketIoStatusSource', () => {
     socket.replySync({ v: 1, rev: 1, statuses: {} });
     expect(calls.length).toBe(before);
   });
+
+  describe('seat data', () => {
+    const dataSink = () => {
+      const calls: unknown[][] = [];
+      const sink: StatusSink = {
+        snapshot: (statuses, rev, data) =>
+          calls.push(['snapshot', statuses, rev, data]),
+        patch: (changes, rev, data) =>
+          calls.push(['patch', changes, rev, data]),
+        connectionState: () => undefined,
+      };
+      return { sink, calls };
+    };
+
+    it('passes data from the snapshot, data-only patches and held patches', () => {
+      const socket = new FakeSocket();
+      const { sink, calls } = dataSink();
+      socketIoStatusSource(socket).subscribe(sink);
+      socket.connect();
+
+      // Held while the sync is in flight, replayed with its data.
+      socket.receive('seats:patch', {
+        v: 1,
+        rev: 2,
+        data: { 's-2': { price: 40 } },
+      });
+      socket.replySync({
+        v: 1,
+        rev: 1,
+        statuses: { 's-1': 'reserved' },
+        data: { 's-1': { price: 95 } },
+      });
+      socket.receive('seats:patch', {
+        v: 1,
+        rev: 3,
+        changes: { 's-1': null },
+        data: { 's-1': null },
+      });
+
+      expect(calls).toEqual([
+        ['snapshot', { 's-1': 'reserved' }, 1, { 's-1': { price: 95 } }],
+        ['patch', {}, 2, { 's-2': { price: 40 } }],
+        ['patch', { 's-1': null }, 3, { 's-1': null }],
+      ]);
+    });
+
+    it('rejects malformed data', () => {
+      const socket = new FakeSocket();
+      const { sink, calls } = dataSink();
+      const warn = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      socketIoStatusSource(socket).subscribe(sink);
+      socket.connect();
+      socket.replySync({ v: 1, statuses: {} });
+
+      socket.receive('seats:patch', { v: 1, data: { 's-1': 'cheap' } });
+      socket.receive('seats:patch', { v: 1, data: { 's-1': [1] } });
+      socket.receive('seats:patch', { v: 1 }); // neither changes nor data
+      expect(calls.filter((c) => c[0] === 'patch')).toEqual([]);
+      expect(warn).toHaveBeenCalledTimes(3);
+      warn.mockRestore();
+
+      // A snapshot with bad data is an invalid reply.
+      const states: string[] = [];
+      const other = new FakeSocket();
+      socketIoStatusSource(other).subscribe({
+        ...sink,
+        connectionState: (state) => states.push(state),
+      });
+      other.connect();
+      other.replySync({ v: 1, statuses: {}, data: { 's-1': null } });
+      expect(states.at(-1)).toBe('offline');
+    });
+  });
 });

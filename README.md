@@ -218,7 +218,8 @@ export class BookingComponent {
 
 - **Selection Handling**: Single and multi-seat selection with configurable `maxSelectable`.
 - **Status Registry**: Map seat statuses (e.g. `available`, `reserved`, `locked`, `vip`) with custom colors and selectable flags.
-- **Async Tooltips**: Built-in debounced tooltip resolver supporting async data fetching (e.g., live pricing or seat views).
+- **Async Tooltips**: Built-in debounced tooltip resolver supporting async data fetching (e.g., live pricing or seat views). The provider receives the seat's current `status` and its runtime `data`, and is called again when either changes.
+- **Runtime Seat Data**: Attach app data to seats with `setSeatData` / `seatData` (prices, tickets, holder details), and receive shared data (such as live prices) from the server with live updates. Both live only in the viewer and are never written into the floorplan; `getSeatData` merges them, with the app's own fields taking precedence.
 - **Navigation**: Touch pinch-to-zoom, mouse wheel zoom, pan dragging, and keyboard navigation.
 - **Live Updates**: Seat statuses update in real time over Socket.IO; seats booked by someone else are released from the user's selection.
 
@@ -252,6 +253,7 @@ viewer.on('selectionInvalidated', ({ seats }) => {
 - A `statusSource` passed to `createViewer` is subscribed right after the constructor returns, so listeners you attach straight after creation receive its first events (such as `connecting`).
 - `connectionStateChanged` fires when the state changes, when the error changes while the state stays the same (e.g. a new `connect_error`), and with `state: null` when `setStatusSource(null)` removes the source.
 - Selected seats whose new status is not `selectable` are deselected automatically and announced to screen readers. This also applies to `setStatus` / `setStatuses`.
+- The server can also send seat data (for example `{ price: 120 }`) with snapshots and patches; read it with `getSeatData(seatId)` or in the tooltip provider's `data`. Everyone viewing the floorplan receives it, so per-user data such as a ticket should be set locally with `setSeatData`, which live updates never overwrite.
 - Reserving or holding a seat is still your own API call; the server then broadcasts the change to every viewer.
 - Any other transport can implement `StatusSource` (`subscribe(sink) => unsubscribe`), or call `applyStatusSnapshot` / `applyStatusPatch` directly.
 
@@ -301,17 +303,19 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
 
 #### `ViewerOptions`
 
-| Option                     | Type                     | Description                                                                                |
-| :------------------------- | :----------------------- | :----------------------------------------------------------------------------------------- |
-| `floorplan`                | `Floorplan`              | The floorplan JSON object to render.                                                       |
-| `statuses`                 | `Record<string, string>` | Map of seat IDs to status names (e.g. `'reserved'`, `'booked'`).                           |
-| `statusDefinitions`        | `SeatStatusDefinition[]` | Custom status configurations (colors, selectability).                                      |
-| `maxSelectable`            | `number`                 | Maximum number of seats selectable simultaneously.                                         |
-| `selectedSeatIds`          | `string[]`               | Initial pre-selected seat IDs.                                                             |
-| `tooltipProvider`          | `TooltipProvider`        | Async function returning tooltip title, subtitle, or content.                              |
-| `tooltipDebounceMs`        | `number`                 | Debounce delay in ms before showing tooltip (default: `150`).                              |
-| `enableKeyboardNavigation` | `boolean`                | Enable spatial 2D arrow navigation and accessibility (default: `true`).                    |
-| `statusSource`             | `StatusSource`           | Live status updates, e.g. `socketIoStatusSource(socket)`. Subscribed right after creation. |
+| Option                     | Type                       | Description                                                                                                                      |
+| :------------------------- | :------------------------- | :------------------------------------------------------------------------------------------------------------------------------- |
+| `floorplan`                | `Floorplan`                | The floorplan JSON object to render.                                                                                             |
+| `statuses`                 | `Record<string, string>`   | Map of seat IDs to status names (e.g. `'reserved'`, `'booked'`).                                                                 |
+| `statusDefinitions`        | `SeatStatusDefinition[]`   | Custom status configurations (colors, selectability).                                                                            |
+| `maxSelectable`            | `number`                   | Maximum number of seats selectable simultaneously.                                                                               |
+| `selectedSeatIds`          | `string[]`                 | Initial pre-selected seat IDs.                                                                                                   |
+| `tooltipProvider`          | `TooltipProvider`          | Async function returning tooltip title, subtitle, or content.                                                                    |
+| `tooltipRenderer`          | `TooltipRenderer`          | Renders custom tooltip content into an unstyled host element: `(ctx, host) => cleanup`. Takes precedence over `tooltipProvider`. |
+| `tooltipDebounceMs`        | `number`                   | Debounce delay in ms before showing tooltip (default: `150`).                                                                    |
+| `enableKeyboardNavigation` | `boolean`                  | Enable spatial 2D arrow navigation and accessibility (default: `true`).                                                          |
+| `statusSource`             | `StatusSource`             | Live status updates, e.g. `socketIoStatusSource(socket)`. Subscribed right after creation.                                       |
+| `seatData`                 | `Record<string, SeatData>` | Runtime data per seat (price, ticket, ...), passed to the tooltip provider. Never saved in the floorplan.                        |
 
 #### `ViewerEvents`
 
@@ -322,6 +326,7 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
 - `floorplanLoaded`: Emitted when a new floorplan JSON is loaded.
 - `violationsUpdated`: Emitted when layout violations are detected.
 - `statusesChanged`: Emitted with `{ changes, replaced }` whenever seat statuses change.
+- `seatDataChanged`: Emitted with `{ changes, replaced, source }` when seat data changes, from `setSeatData` (`source: 'app'`) or a live update (`source: 'live'`).
 - `selectionInvalidated`: Emitted with `{ seatIds, seats, reason }` when selected seats became unavailable and were deselected.
 - `connectionStateChanged`: Emitted with `{ state, error? }` when the live status source connects, reconnects or goes offline, when its error changes, and with `state: null` when the source is removed.
 
@@ -366,6 +371,8 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
   - `[maxSelectable]`: `number`
   - `[options]`: `Partial<ViewerOptions>`
   - `[statusSource]`: `StatusSource | null`. Takes precedence over `options.statusSource`. Once this input has been given a value (including `null` to disconnect), `options.statusSource` is never used, so a custom source is never swapped for another one. Changes to `options.statusSource` apply only while this input is unused.
+  - `[seatData]`: `Record<string, SeatData>`. Replaces the previous seat data on change; never saved in the floorplan.
+  - `[tooltipComponent]`: `Type<unknown>`. Component rendered as the seat tooltip (see below).
 - **Outputs**:
   - `(ready)`
   - `(seatHovered)`
@@ -376,9 +383,24 @@ Touching edges within configured tolerance (default `0.01`) are permitted.
   - `(floorplanLoaded)`
   - `(violationsUpdated)`
   - `(statusesChanged)`
+  - `(seatDataChanged)`
   - `(selectionInvalidated)`
   - `(connectionStateChanged)`
 - Outputs fired by a single live update (e.g. `statusesChanged`, `seatDeselected`, `selectionInvalidated`, `selectionChanged`) are emitted together in one `NgZone.run`, so each update costs one change-detection pass.
+
+##### Custom tooltip content
+
+Put an `<ng-template seatTooltip>` inside `<seats-viewer>` to render any Angular template or component as the seat tooltip. The viewer handles the hover delay, positioning and showing/hiding, and re-renders the template when the hovered seat's status or data changes. The tooltip box is unstyled, so the template brings its own look.
+
+```html
+<seats-viewer [floorplan]="plan" [statusSource]="source">
+  <ng-template seatTooltip let-seat="seat" let-status="status" let-data="data">
+    <my-seat-card [label]="seat.label" [status]="status" [price]="data?.price" />
+  </ng-template>
+</seats-viewer>
+```
+
+Template variables: `seat`, `row`, `building`, `status`, `data`, and the whole `TooltipContext` as `let-tooltip` (`$implicit`). Alternatively pass a component class with `[tooltipComponent]="MyTooltip"`; it receives the context through a `context = input.required<TooltipContext>()` input. Both take precedence over `options.tooltipProvider`, and are read once, when the viewer is created. Outside Angular, the same hook is the `tooltipRenderer(ctx, host)` viewer option.
 
 #### `<seats-editor>`
 

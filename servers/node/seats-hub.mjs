@@ -10,35 +10,73 @@ export const PATCH_EVENT = 'seats:patch';
 
 const roomFor = (floorplanId) => `floorplan:${floorplanId}`;
 
+const isRecord = (value) =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * Throws a TypeError unless `changes`/`data` match the protocol. Clients reject
+ * a whole patch or snapshot containing a malformed entry, so nothing invalid
+ * may reach the store.
+ */
+export function validateChanges(changes, data) {
+  if (
+    changes !== undefined &&
+    (!isRecord(changes) ||
+      !Object.values(changes).every((s) => s === null || typeof s === 'string'))
+  ) {
+    throw new TypeError('changes must map seat ids to a status or null');
+  }
+  if (
+    data !== undefined &&
+    (!isRecord(data) ||
+      !Object.values(data).every((d) => d === null || isRecord(d)))
+  ) {
+    throw new TypeError('data must map seat ids to an object or null');
+  }
+}
+
 /**
  * In-memory store, one entry per floorplan. Replace with your database; keep
- * `get` and `apply` atomic so a snapshot's `rev` matches its `statuses`.
+ * `get` and `apply` atomic so a snapshot's `rev` matches its contents.
+ *
+ * Seat data is broadcast to every client viewing the floorplan: only store
+ * data that all of them may see (prices, categories), never per-user data.
  */
 export function createMemoryStore(initial = {}) {
   const floorplans = new Map();
   for (const [id, statuses] of Object.entries(initial)) {
-    floorplans.set(id, { rev: 0, statuses: { ...statuses } });
+    floorplans.set(id, { rev: 0, statuses: { ...statuses }, data: {} });
   }
   const entry = (id) => {
-    if (!floorplans.has(id)) floorplans.set(id, { rev: 0, statuses: {} });
+    if (!floorplans.has(id)) {
+      floorplans.set(id, { rev: 0, statuses: {}, data: {} });
+    }
     return floorplans.get(id);
   };
+  const applyTo = (target, changes) => {
+    for (const [seatId, value] of Object.entries(changes)) {
+      if (value === null) delete target[seatId];
+      else target[seatId] = value;
+    }
+  };
   return {
-    /** @returns {{ rev: number, statuses: Record<string, string> }} */
+    /**
+     * @returns {{ rev: number, statuses: Record<string, string>, data: Record<string, object> }}
+     */
     get(floorplanId) {
-      const { rev, statuses } = entry(floorplanId);
-      return { rev, statuses: { ...statuses } };
+      const { rev, statuses, data } = entry(floorplanId);
+      return { rev, statuses: { ...statuses }, data: { ...data } };
     },
     /**
      * @param {Record<string, string | null>} changes `null` resets a seat.
+     * @param {Record<string, object | null>} [data] replaces a seat's data;
+     *   `null` removes it.
      * @returns {number} the new revision
      */
-    apply(floorplanId, changes) {
+    apply(floorplanId, changes, data = {}) {
       const state = entry(floorplanId);
-      for (const [seatId, status] of Object.entries(changes)) {
-        if (status === null) delete state.statuses[seatId];
-        else state.statuses[seatId] = status;
-      }
+      applyTo(state.statuses, changes);
+      applyTo(state.data, data);
       state.rev += 1;
       return state.rev;
     },
@@ -89,8 +127,10 @@ export function attachSeatsHub(io, options = {}) {
         });
       }
       try {
-        const { rev, statuses } = await store.get(socket.data.floorplanId);
-        ack({ v: PROTOCOL_VERSION, rev, statuses });
+        const { rev, statuses, data } = await store.get(
+          socket.data.floorplanId
+        );
+        ack({ v: PROTOCOL_VERSION, rev, statuses, data });
       } catch {
         ack({ v: PROTOCOL_VERSION, error: 'Could not load seat statuses' });
       }
@@ -100,17 +140,19 @@ export function attachSeatsHub(io, options = {}) {
   return {
     store,
     /**
-     * Call after a booking, cancellation, hold, etc. has been committed.
+     * Call after a booking, cancellation, hold, price change, etc. has been
+     * committed. Throws a TypeError, before anything is stored, if the
+     * changes are malformed.
      * @param {string} floorplanId
-     * @param {Record<string, string | null>} changes
+     * @param {Record<string, string | null>} [changes] status changes
+     * @param {Record<string, object | null>} [data] seat data changes
      */
-    async publish(floorplanId, changes) {
-      const rev = await store.apply(floorplanId, changes);
-      io.to(roomFor(floorplanId)).emit(PATCH_EVENT, {
-        v: PROTOCOL_VERSION,
-        rev,
-        changes,
-      });
+    async publish(floorplanId, changes = {}, data) {
+      validateChanges(changes, data ?? undefined);
+      const rev = await store.apply(floorplanId, changes, data);
+      const message = { v: PROTOCOL_VERSION, rev, changes };
+      if (data) message.data = data;
+      io.to(roomFor(floorplanId)).emit(PATCH_EVENT, message);
       return rev;
     },
   };

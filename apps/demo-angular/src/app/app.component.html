@@ -54,6 +54,8 @@
             [floorplan]="floorplan"
             [statuses]="statuses"
             [maxSelectable]="6"
+            [options]="viewerOptions"
+            [seatData]="myTickets"
             [statusSource]="statusSource"
             (statusesChanged)="onStatusesChanged($event)"
             (connectionStateChanged)="onConnectionStateChanged($event)"
@@ -62,7 +64,12 @@
             (seatSelected)="onSeatSelected($event)"
             (seatDeselected)="onSeatDeselected($event)"
             (seatHovered)="onSeatHovered($event)"
-          ></seats-viewer>
+          >
+            <!-- Custom tooltip: any Angular template or component. -->
+            <ng-template seatTooltip let-tooltip>
+              <open-seats-tooltip-card [context]="tooltip" />
+            </ng-template>
+          </seats-viewer>
         </div>
 
         <!-- Floating Zoom & Pan Controls for Viewer -->
