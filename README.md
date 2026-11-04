@@ -12,6 +12,8 @@ An open-source, framework-agnostic JavaScript/TypeScript suite for **interactive
 2. **Reservation Viewer (`@open-seats/viewer`)**: A high-performance canvas rendering engine for seat reservations with instant selection handling, custom status registry, async debounced tooltips, touch pinch-to-zoom/pan, and full screen-reader ARIA live announcements and 2D spatial keyboard navigation.
 3. **Framework Wrappers (`@open-seats/angular`)**: First-class standalone components (`<seats-viewer>` and `<seats-editor>`) for modern Angular applications.
 
+📖 **Documentation**: guides and a type-checked example for every feature live in [`docs/`](./docs). Run them locally with `npm run docs:dev`.
+
 ---
 
 ## Table of Contents
@@ -436,6 +438,15 @@ npx nx serve demo-vanilla
 ```
 
 Access the application at [http://localhost:5173](http://localhost:5173).
+
+### Documentation Site
+
+```bash
+npm run docs:dev     # VitePress dev server with hot reload
+npm run docs:build   # type-check the examples, then build to docs/.vitepress/dist
+```
+
+Every code example on the site is a real file under `docs/snippets/` that `npm run check` type-checks and lints against the current library source, so examples can't silently go out of date.
 
 ### Run All Unit Tests
 
